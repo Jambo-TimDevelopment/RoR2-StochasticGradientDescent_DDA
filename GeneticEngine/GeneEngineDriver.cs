@@ -1,4 +1,5 @@
-﻿using RoR2;
+using GeneticsArtifact.CheatManager;
+using RoR2;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -26,7 +27,7 @@ namespace GeneticsArtifact
         private static void Run_Start(On.RoR2.Run.orig_Start orig, Run self)
         {
             orig(self);
-            if (NetworkServer.active && RunArtifactManager.instance.IsArtifactEnabled(ArtifactOfGenetics.artifactDef))
+            if (NetworkServer.active && DdaAlgorithmState.IsGeneticAlgorithmEnabled && RunArtifactManager.instance.IsArtifactEnabled(ArtifactOfGenetics.artifactDef))
             {
                 self.gameObject.AddComponent<GeneEngineDriver>();
             }
@@ -35,7 +36,7 @@ namespace GeneticsArtifact
         private static void CharacterBody_Start(On.RoR2.CharacterBody.orig_Start orig, CharacterBody self)
         {
             orig(self);
-            if (NetworkServer.active &&
+            if (NetworkServer.active && DdaAlgorithmState.IsGeneticAlgorithmEnabled &&
                (RunArtifactManager.instance.IsArtifactEnabled(ArtifactOfGenetics.artifactDef) || ConfigManager.maintainIfDisabled.Value))
             {
                 if (instance == null) //Emergency Catch for Bulwark Edge Case
@@ -72,7 +73,7 @@ namespace GeneticsArtifact
         private static void HealthComponent_TakeDamage(On.RoR2.HealthComponent.orig_TakeDamage orig, HealthComponent self, DamageInfo damageInfo)
         {
             orig(self, damageInfo);
-            if (NetworkServer.active && RunArtifactManager.instance.IsArtifactEnabled(ArtifactOfGenetics.artifactDef))
+            if (NetworkServer.active && DdaAlgorithmState.IsGeneticAlgorithmEnabled && RunArtifactManager.instance.IsArtifactEnabled(ArtifactOfGenetics.artifactDef))
             {
                 if (damageInfo.attacker is GameObject attackerObject)
                 {

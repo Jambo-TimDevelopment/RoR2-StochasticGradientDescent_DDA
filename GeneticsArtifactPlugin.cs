@@ -1,6 +1,7 @@
-﻿using BepInEx;
+using BepInEx;
 using BepInEx.Bootstrap;
 using BepInEx.Logging;
+using GeneticsArtifact.CheatManager;
 using R2API.Utils;
 using System.Reflection;
 using UnityEngine;
@@ -15,6 +16,7 @@ namespace GeneticsArtifact
     [BepInDependency("com.bepis.r2api" + ".items", BepInDependency.DependencyFlags.HardDependency)]
     [BepInDependency("com.bepis.r2api" + ".language", BepInDependency.DependencyFlags.HardDependency)]
     [BepInDependency("com.bepis.r2api" + ".recalculatestats", BepInDependency.DependencyFlags.HardDependency)]
+    [BepInDependency("com.bepis.r2api" + ".commandhelper", BepInDependency.DependencyFlags.HardDependency)]
     [BepInDependency("com.rune580.riskofoptions", BepInDependency.DependencyFlags.SoftDependency)]
     #endregion
     [NetworkCompatibility(CompatibilityLevel.EveryoneMustHaveMod, VersionStrictness.EveryoneNeedSameModVersion)]
@@ -34,6 +36,7 @@ namespace GeneticsArtifact
             geneticAssetBundle = AssetBundle.LoadFromStream(Assembly.GetExecutingAssembly().GetManifestResourceStream("GeneticsArtifact.ArtifactResources.genetics"));
 
             ConfigManager.Init(Config);
+            DdaCheatManager.Init();
 
             ArtifactOfGenetics.Init();
             GeneTokens.Init();
