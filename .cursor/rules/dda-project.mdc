@@ -1,0 +1,44 @@
+---
+description: "DDA algorithm for RoR2 mod: sensors, actuators, gradient descent. BepInEx, R2API, GeneEngineDriver, DdaAlgorithmState."
+alwaysApply: true
+---
+
+# DDA Algorithm for Risk of Rain 2
+
+The mod implements DDA based on gradient descent. Architecture: **Sensors → Decision module (SGD) → Actuators**.
+
+## Stack
+- BepInEx, R2API (ArtifactCode, RecalculateStats, CommandHelper)
+- RoR2: Run, CharacterBody, HealthComponent, TeamIndex, RunArtifactManager
+- Harmony: `On.RoR2.HealthComponent.TakeDamage` etc.
+
+## Key Files
+- `DdaAlgorithmState.cs` — `ActiveAlgorithm` (Genetic/Sgd), `IsGeneticAlgorithmEnabled`
+- `GeneEngineDriver.cs` — Run_Start, CharacterBody_Start, HealthComponent_TakeDamage
+- `MonsterGeneBehaviour.cs` — currentGenes, damageDealt, timeAlive, score
+- `GeneTokenCalc.cs` — RecalculateStatsAPI, GetTokensToAdd
+- `GeneTokens.cs` — GeneStat: MaxHealth, MoveSpeed, AttackSpeed, AttackDamage
+
+## Patterns
+- Check: `NetworkServer.active`, `RunArtifactManager.instance.IsArtifactEnabled(ArtifactOfGenetics.artifactDef)`
+- Monsters: `teamIndex == TeamIndex.Monster` and `inventory != null`
+- Logs: `GeneticsArtifactPlugin.geneticLogSource.LogInfo/LogWarning`
+
+## Modules
+1. **Sensors** — player metrics (accuracy, damage, survivability). Reference: MonsterGeneBehaviour.damageDealt, timeAlive.
+2. **Actuators** — modify monster stats via GeneTokenCalc/RecalculateStatsAPI. Reference: MonsterGeneBehaviour.AdaptToNewGenes.
+3. **SGD** — input: metrics; output: GeneStat multipliers. Update by timeLimit/deathLimit like GeneEngineDriver.Learn().
+
+## Folder Structure
+- All classes of the author's algorithm (SGD/DDA) — in a **separate folder** (e.g., `SgdEngine/` or `DdaEngine/`).
+- Sensors, actuators, SGD decision module — only in this folder.
+
+## Genetic Algorithm Protection
+- **Do NOT modify** `GeneticEngine/`: GeneEngineDriver, MasterGeneBehaviour, MonsterGeneBehaviour, GeneTokenCalc, GeneTokens.
+- Exception: only critically necessary changes (bug blocking the project, or minimal integration at explicit user request).
+- SGD integration — via DdaAlgorithmState.ActiveAlgorithm and a separate driver, not by modifying GeneticEngine.
+
+## Style
+- SOLID, KISS. Prefix `Sgd` for sgd DDA code.
+- Namespace: `GeneticsArtifact`, `GeneticsArtifact.CheatManager`.
+- Full documentation: [RULE.md](RULE.md)
