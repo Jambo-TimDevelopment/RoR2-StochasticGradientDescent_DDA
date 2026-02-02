@@ -32,6 +32,17 @@ namespace GeneticsArtifact.CheatManager
             }
         }
 
+        private static Font GetFontForOverlay()
+        {
+            var font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            if (font != null) return font;
+
+            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (font != null) return font;
+
+            return Font.CreateDynamicFontFromOSFont("Arial", 14);
+        }
+
         private static void EnsureOverlayExists()
         {
             if (_overlayRoot != null) return;
@@ -50,7 +61,7 @@ namespace GeneticsArtifact.CheatManager
             textObj.transform.SetParent(_overlayRoot.transform, false);
 
             _textComponent = textObj.AddComponent<Text>();
-            _textComponent.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _textComponent.font = GetFontForOverlay();
             _textComponent.fontSize = 14;
             _textComponent.color = Color.white;
 
