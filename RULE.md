@@ -1,131 +1,258 @@
-# Project Rules: DDA Algorithm for Risk of Rain 2
+# Правила проекта: DDA (SGD) для Risk of Rain 2
 
-The mod implements a Dynamic Difficulty Adaptation (DDA) algorithm based on gradient descent for a master's thesis. The existing genetic algorithm is the reference; the target is SGD.
+Этот мод — исследовательская реализация **системы динамической адаптации уровня сложности** (Dynamic Difficulty Adjustment, DDA) для магистерской диссертации.
+
+- **Референс в репозитории**: существующий генетический алгоритм (папка `GeneticEngine/`).
+- **Целевой алгоритм диссертации**: DDA на основе **стохастического градиентного спуска** (SGD) поверх архитектуры *Sensors → Decision module → Actuators*.
 
 ---
 
-## DDA Architecture
+## Архитектура DDA
 
 ```
-Sensors (player metrics) → Decision module (gradient descent) → Actuators (monster parameters)
+Sensors (метрики игрока) → Decision module (SGD) → Actuators (параметры сложности)
 ```
 
-- **Sensors:** collect data on player behavior (accuracy, damage, survivability, time in combat, etc.) [Sensors list TODO from author]
-- **Decision module:** analyzes metrics, computes gradient, updates difficulty parameters
-- **Actuators:** apply changes to monsters (HP, damage, speed, spawn)
+- **Sensors (сенсоры)**: собирают телеметрию и оценивают компоненты навыка игрока \(S_{p_i}\) и виртуальной силы \(V_p\) в скользящем временном окне.
+- **Decision module (модуль решений, SGD)**: минимизирует целевую функцию баланса (см. ниже), вычисляет/аппроксимирует градиент и обновляет параметры сложности (вектор \(\theta\)).
+- **Actuators (актуаторы)**: применяют \(\theta\) к игровому миру. В текущей реализации это в основном **числовые модификаторы статов монстров** (`GeneStat`), т.е. управление \(V_c\).
 
 ---
 
-## Stack and Dependencies
+## Термины и модель сложности (Schreiber)
 
-- **BepInEx** — mod loader
-- **R2API** — ArtifactCode, ContentManagement, Items, Language, RecalculateStats, CommandHelper
-- **RoR2 API** — Run, CharacterBody, HealthComponent, TeamIndex, RunArtifactManager, Stage
-- **On.** — Harmony patching (e.g., `On.RoR2.HealthComponent.TakeDamage`)
+Используем модель **воспринимаемой сложности**:
 
----
+\[
+C = (V_c + S_c) - (V_p + S_p)
+\]
 
-## Key Files and Their Roles
+Где:
 
-| File | Purpose |
-|------|---------|
-| `GeneticsArtifactPlugin.cs` | Entry point, Awake, Init of all subsystems |
-| `CheatManager/DdaAlgorithmState.cs` | State: `IsGeneticAlgorithmEnabled`, `ActiveAlgorithm` (Genetic/Sgd), `IsDebugOverlayEnabled` |
-| `CheatManager/DdaCheatManager.cs` | Console commands: `dda_genetics`, `dda_algorithm`, `dda_debug_overlay`, `dda_param` |
-| `GeneticEngine/GeneEngineDriver.cs` | Genetic algorithm driver; patches Run_Start, CharacterBody_Start, HealthComponent_TakeDamage |
-| `GeneticEngine/MonsterGeneBehaviour.cs` | Monster data: `currentGenes`, `damageDealt`, `timeAlive`, `timeEngaged`, `score` |
-| `GeneticEngine/MasterGeneBehaviour.cs` | Gene template per monster type; `MutateFromChildren` — learning by score |
-| `GeneticEngine/GeneTokenCalc.cs` | RecalculateStatsAPI: converts genes to stat modifiers |
-| `GeneticEngine/GeneTokens.cs` | ItemDef for GeneStat (MaxHealth, MoveSpeed, AttackSpeed, AttackDamage) |
-| `ArtifactResources/ConfigManager.cs` | BepInEx Config: timeLimit, deathLimit, geneFloor, geneCap, etc. |
+- **\(S_p\) (skill of player / навык игрока)**: измеримые проявления умения игрока управлять персонажем и принимать решения (механика, тактика, управление ресурсами, адаптивность). В моде это источник данных для **сенсоров**.
+- **\(V_p\) (virtual power / виртуальная сила игрока)**: «числовая мощь» игрока, не связанная напрямую с умением (набор предметов, уровни, стаки, синергии, проки, выбор персонажа/снаряжения). Это важно учитывать, чтобы DDA не «наказывал» сильный билд, принимая его за высокий \(S_p\).
+- **\(V_c\) (virtual challenge / виртуальная сложность)**: «числовая» сложность, задаваемая множителями и параметрами врагов. **Текущая реализация мода в основном управляет именно \(V_c\)** через множители `GeneStat` (HP/урон/скорости).
+- **\(S_c\) (skill required by challenge / требуемый навык)**: тактическая/поведенческая сложность, т.е. какие навыки требует игра (паттерны атак, агрессия/координация, типы врагов, плотность/структура волн, контр‑игра против кайт/прыжков и т.п.). В текущей версии это рассматривается как направление расширения архитектуры (см. заметки по интеграции).
+
+Интерпретация знака \(C\):
+
+- **\(C > 0\)**: игра воспринимается сложнее желаемого (челлендж «перекрывает» силу и навык игрока) → адаптация должна снижать \(V_c\) и/или \(S_c\).
+- **\(C < 0\)**: игра воспринимается слишком простой → адаптация может повышать \(V_c\) и/или \(S_c\) в безопасных пределах.
 
 ---
 
-## Code Patterns
+## Стек и зависимости
 
-1. **Server check:** DDA logic only when `NetworkServer.active`
-2. **Artifact check:** `RunArtifactManager.instance.IsArtifactEnabled(ArtifactOfGenetics.artifactDef)`
-3. **Algorithm check:** `DdaAlgorithmState.ActiveAlgorithm == DdaAlgorithmType.Sgd` for SGD branches
-4. **Monsters:** `self.teamComponent.teamIndex == TeamIndex.Monster` and `self.inventory != null`
-5. **Logging:** `GeneticsArtifactPlugin.geneticLogSource.LogInfo/LogWarning/LogError`
-6. **Players:** `TeamIndex.Player`; for sensors — `CharacterBody` with `isPlayerControlled` or `CharacterMaster`
+- **BepInEx** — загрузчик модов.
+- **R2API** — ArtifactCode, ContentManagement, Items, Language, RecalculateStats, CommandHelper.
+- **RoR2 API** — Run, CharacterBody, HealthComponent, TeamIndex, RunArtifactManager, Stage.
+- **On.** — хуки/патчинг (например, `On.RoR2.HealthComponent.TakeDamage`).
 
 ---
 
-## DDA Module Implementation
+## Ключевые файлы и их роли
 
-### Sensors Module
-
-- Collect player metrics: accuracy, damage dealt, damage taken, time in combat, deaths
-- Use hooks: `HealthComponent.TakeDamage`, `CharacterBody` (Update/fixed intervals)
-- Store data in a structure/class accessible to the decision module
-- Reference: `MonsterGeneBehaviour.damageDealt`, `timeAlive`, `timeEngaged`, `score`
-
-### Actuators Module
-
-- Modify monster parameters via `GeneTokenCalc` / `RecalculateStatsAPI` or directly via `CharacterBody`
-- Reference: `MonsterGeneBehaviour.AdaptToNewGenes`, `GeneTokenCalc.GetTokensToAdd`, `RecalculateStatsAPI_GetStatCoefficients`
-- Parameters: MaxHealth, MoveSpeed, AttackSpeed, AttackDamage (GeneStat)
-
-### Decision Module (SGD)
-
-- Input: metric vector from sensors
-- Output: parameter vector for actuators (multipliers per GeneStat)
-- Gradient descent formula: [add from thesis]
-- Loss function: [add from thesis]
-- Update: by time (timeLimit) or events (deathLimit) — similar to `GeneEngineDriver.Learn()`
+| Файл | Назначение |
+|------|------------|
+| `GeneticsArtifactPlugin.cs` | Точка входа, `Awake`, инициализация подсистем |
+| `CheatManager/DdaAlgorithmState.cs` | Рантайм‑состояние: `IsGeneticAlgorithmEnabled`, `ActiveAlgorithm` (Genetic/Sgd), `IsDebugOverlayEnabled` |
+| `CheatManager/DdaCheatManager.cs` | Консольные команды: `dda_genetics`, `dda_algorithm`, `dda_debug_overlay`, `dda_param` |
+| `GeneticEngine/GeneEngineDriver.cs` | Драйвер генетического алгоритма; хуки Run_Start, CharacterBody_Start, HealthComponent_TakeDamage |
+| `GeneticEngine/MonsterGeneBehaviour.cs` | Данные по монстру: `currentGenes`, `damageDealt`, `timeAlive`, `timeEngaged`, `score` |
+| `GeneticEngine/MasterGeneBehaviour.cs` | «Мастер‑копия» генов для типа монстра; `MutateFromChildren` — обучение по score |
+| `GeneticEngine/GeneTokenCalc.cs` | `RecalculateStatsAPI`: перевод генов в модификаторы статов |
+| `GeneticEngine/GeneTokens.cs` | ItemDef для GeneStat (MaxHealth, MoveSpeed, AttackSpeed, AttackDamage) |
+| `ArtifactResources/ConfigManager.cs` | BepInEx‑конфиг: `timeLimit`, `deathLimit`, `geneFloor`, `geneCap` и др. |
 
 ---
 
-## Algorithm Math (fill in from thesis)
+## Код‑паттерны (инварианты интеграции)
+
+1. **Проверка сервера**: DDA‑логика исполняется только при `NetworkServer.active`.
+2. **Проверка артефакта**: `RunArtifactManager.instance.IsArtifactEnabled(ArtifactOfGenetics.artifactDef)`.
+3. **Выбор алгоритма**: ветвления под SGD защищаются `DdaAlgorithmState.ActiveAlgorithm == DdaAlgorithmType.Sgd`.
+4. **Монстры**: `teamIndex == TeamIndex.Monster` и `inventory != null`.
+5. **Логи**: `GeneticsArtifactPlugin.geneticLogSource.LogInfo/LogWarning/LogError`.
+6. **Игроки**: `TeamIndex.Player`; для сенсоров — `CharacterBody` с `isPlayerControlled` или `CharacterMaster`.
+
+---
+
+## Реализация модулей DDA
+
+### Модуль сенсоров
+
+Сенсоры отвечают за оценку компонентов **реального навыка игрока** \(S_p\) и за учёт **виртуальной силы** \(V_p\) (мощности билда), чтобы не смешивать «умение» и «цифры».
+
+#### Декомпозиция \(S_p\) (что измеряем)
+Ниже перечислены компоненты \(S_{p_i}\), релевантные для шутера‑рогалика, и примеры метрик. Это **шаблон** для проектной реализации сенсоров (не обещание, что всё уже реализовано).
+
+- **Механическое мастерство**
+  - **Точность**: \(hits/shots\) (с учётом типа оружия; при наличии — отдельный счётчик попаданий по уязвимым зонам).
+  - **Уклонение**: доля «избежанных» атак среди атак, требующих уклонения (аппроксимации: доля полученного урона от снарядов; частота попаданий по игроку во время активного перемещения).
+  - **Управление движением**: доля времени в высоких скоростях/в воздухе, частота смены направления, использование рывков/прыжков (если доступно по API персонажа).
+- **Тактическое мышление**
+  - **Позиционирование**: доля урона, полученного «в окружении» (аппрокс.: количество врагов в радиусе / полученный урон), частота смены позиции.
+  - **Приоритизация целей**: порядок убийств (например, доля опасных/поддерживающих врагов среди первых \(30\%\) убийств в столкновении).
+  - **Контроль территории**: использование возможностей (подбор лечений/ресурсов до исчезновения; доля поднятых временных усилений).
+- **Ресурсный менеджмент**
+  - **Боезапас/ресурс**: частота ситуаций «без ресурса» (если применимо), равномерность использования арсенала.
+  - **Здоровье**: нормированный входящий урон и скорость восстановления после больших потерь.
+  - **Способности**: использование способностей по готовности (частота “cooldown idle”), разнообразие применяемых способностей.
+- **Адаптивность**
+  - **Скорость обучения**: как быстро падает эффективность новых угроз (например, как быстро уменьшается доля попаданий “снайпера” по игроку до порога).
+  - **Гибкость билда**: насколько быстро растёт эффективность после получения новых предметов/способностей (аппрокс.: прирост урона/выживаемости при сохранении/улучшении метрик \(S_p\)).
+  - **Риск/награда**: частота выбора «опасных» активностей и ожидаемый ущерб/выигрыш.
+
+#### Временное окно, нормализация и шум (RNG)
+Игровые данные шумные (RNG лута/событий), поэтому сенсоры должны работать «мягко»:
+
+- **Окно наблюдения**: агрегировать метрики на окне \(W\) секунд/событий (например, 30–120 секунд или до N боевых эпизодов).
+- **Сглаживание**: экспоненциальное сглаживание (EMA) для каждой метрики, чтобы избежать резких скачков из‑за RNG.
+- **Нормализация**: приводить метрики к \([0, 1]\) относительно эталонов/порогов (референсных значений для данного этапа ран‑прогрессии), затем формировать \(S_{p_i}(t)\) как взвешенную комбинацию нормализованных сигналов.
+- **Разделение \(S_p\) и \(V_p\)**: показатели «мощности» (предметы/стаки/проки/уровни) учитывать отдельно как \(V_p\), чтобы модуль решений не повышал сложность только потому, что билд стал сильнее.
+
+### Модуль актуаторов
+
+Актуаторы применяют параметры сложности \(\theta\) к миру игры. В терминах модели это рычаги для управления \(V_c\) и (в расширении) \(S_c\).
+
+- **Текущий “рычаг” (реализовано генетическим движком)** — числовые модификаторы статов монстров через `GeneStat`:
+  - `MaxHealth` (HP), `MoveSpeed`, `AttackSpeed`, `AttackDamage`.
+  - Точка применения: `RecalculateStatsAPI` (`GeneTokenCalc`) и/или прямые модификации `CharacterBody`.
+- **Потенциальные рычаги \(S_c\)** (архитектурно поддерживается как направление расширения):
+  - агрессивность/временные окна атак (реакция на механическое мастерство),
+  - координация/состав волн (требования к тактике и контролю территории),
+  - распределение ресурсов (боеприпасы/лечение) как часть «ресурсного вызова».
+
+#### Маппинг компонентов сложности (диссертация → актуаторы)
+Целевая функция диссертации оперирует парами \(S_{p_i}\) ↔ \(S_{c_i}\) и дополнительно согласует \(V_p\) ↔ \(V_c\). На практике это означает следующий «перевод» в рычаги игры:
+
+- **Механическое мастерство \(S_{p,mech}\)** ↔ **механический вызов \(S_{c,mech}\)**:
+  - примеры \(S_{c,mech}\): точность/скорость снарядов противников, окна реакции, частота атак;
+  - в текущем MVP‑контуре мода это чаще всего приближённо выражается через \(V_c\) (урон/скорость атаки/скорость движения монстров).
+- **Тактическое мышление \(S_{p,tactic}\)** ↔ **тактический вызов \(S_{c,tactic}\)**:
+  - примеры \(S_{c,tactic}\): агрессивность, координация, состав волн, фланги/окружения;
+  - в текущем коде явные рычаги \(S_c\) ещё не реализованы и рассматриваются как расширение.
+- **Ресурсный менеджмент \(S_{p,res}\)** ↔ **ресурсный вызов \(S_{c,res}\)**:
+  - примеры \(S_{c,res}\): доступность лечения/боеприпасов/усилений и их распределение;
+  - в текущем коде это также направление расширения.
+- **Виртуальная сила \(V_p\)** ↔ **виртуальная сложность \(V_c\)**:
+  - \(V_p\): «мощность билда» (предметы/стаки/проки),
+  - \(V_c\): числовые множители мира, **которые мод уже умеет применять** через `GeneStat`.
+
+Ограничение текущей реализации: на данный момент основной механизм воздействия — это `GeneStat`‑множители (т.е. \(V_c\)). Поэтому термины \(S_c\) и компоненты \(S_{c_i}\) фиксируются в документации как часть целевой модели диссертации и будущего расширения актуаторов, а не как уже существующая функциональность.
+
+### Модуль решений (SGD)
+
+Модуль решений выполняет **онлайн‑оптимизацию**: на каждом шаге адаптации обновляет \(\theta\) так, чтобы текущий вызов соответствовал текущим возможностям игрока, сохраняя психологическую безопасность (плавность и предсказуемость изменений).
+
+- **Вход**: вектор метрик/оценок из сенсоров (оценки \(S_{p_i}(t)\), оценка \(V_p(t)\), вспомогательные статистики стабильности/шума).
+- **Выход**: вектор параметров сложности \(\theta(t)\) для актуаторов (в текущей реализации — множители для `GeneStat`; в расширении — параметры \(S_{c_i}\)).
+- **Частота обновления**: итеративно с фиксированным интервалом или по событию (аналогично `timeLimit`/`deathLimit` из генетического драйвера).
+
+#### Итерация адаптации (по главе 3.3)
+Алгоритм выполняет параллельную адаптацию по компонентам сложности и повторяет цикл с фиксированным интервалом:
+
+1) **Оценка текущего состояния навыков**
+   - измерение метрик для каждого \(S_{p_i}\) в окне \(W\),
+   - нормализация и сглаживание,
+   - оценка текущих отклонений \((S_{c_i}(t) - S_{p_i}(t))\) и \((V_c(t) - V_p(t))\).
+2) **Вычисление градиентов**
+   - вычисление/аппроксимация частных производных целевой функции по параметрам \(\theta\),
+   - определение направления и величины корректировок,
+   - при необходимости учёт взаимовлияния компонентов (в общем случае — через связь \(S_c(\theta)\), \(V_c(\theta)\)).
+3) **Корректировка параметров сложности**
+   - шаг в направлении антиградиента,
+   - применение ограничений и сглаживания обновлений,
+   - согласование обновлений между компонентами (например, не усиливать одновременно урон и скорость атаки сверх допустимого «скачка»).
+4) **Мониторинг и обратная связь**
+   - оценка реакции игрока на изменения,
+   - при необходимости корректировка весов \(w_i\) (что именно считаем более важным),
+   - контроль сходимости к «приемлемому балансу».
+
+#### Модификации SGD для игровой задачи (по главе 3.2.1)
+Для психологически безопасной и устойчивой адаптации используются следующие «надстройки» над базовым SGD:
+
+- **Ограничение шага/градиента (clipping)**: предотвращает резкие скачки сложности при выбросах метрик.
+- **Адаптивная скорость обучения \(\eta_t\)**: уменьшать \(\eta_t\) при высокой нестабильности/шуме метрик и увеличивать при стабильной картине.
+- **Инерционный член (momentum)**: сглаживает траекторию оптимизации и делает изменения более предсказуемыми.
+- **Ранняя остановка/заморозка**: если ошибка уже «достаточно мала» и колеблется вокруг нуля, временно прекращать обновления.
+- **Cap/Floor и проекция**: жёсткие границы на \(\theta\) (и/или скорость изменения \(\Delta\theta\)) как защита от психологически небезопасных изменений.
+
+---
+
+## Математика алгоритма (из диссертации)
 
 ```
-Loss function: L(θ) = ...
-Gradient: ∇L(θ) = ...
-Parameter update: θ_new = θ_old - η * ∇L(θ)
-Learning rate η: ...
-Input metrics: x = [metric1, metric2, ...]
-Output parameters: θ = [MaxHealth_mult, MoveSpeed_mult, AttackSpeed_mult, AttackDamage_mult]
+Целевая функция (ошибка баланса):
+F(t) = Σ_i [ w_i · (S_c_i(t) - S_p_i(t))² ] + α · (V_c(t) - V_p(t))²
+
+Обозначения:
+- S_p_i(t): i‑тая компонента реального навыка игрока (точность, позиционирование, ресурсный менеджмент, ...)
+- S_c_i(t): соответствующая компонента тактической сложности (требуемый навык)
+- V_p(t): виртуальная сила (мощность билда)
+- V_c(t): виртуальная сложность (числовые множители)
+- w_i: вес важности навыка
+- α: вес согласования виртуальной силы и виртуальной сложности
+
+Параметризация:
+- θ(t): вектор параметров сложности, которые реально изменяет модуль решений
+  - текущий MVP: θ = [MaxHealth_mult, MoveSpeed_mult, AttackSpeed_mult, AttackDamage_mult]
+  - при расширении: θ может включать параметры S_c (агрессия, координация, состав волн, ...)
+
+Правило обновления (SGD):
+θ_{t+1} = Project( θ_t - η_t · ∇_θ F(t) )
+
+где:
+- η_t: скорость обучения (контролирует плавность адаптации)
+- Project(·): проекция на допустимые пределы (cap/floor), чтобы изменения были безопасными
+
+Примечание про градиент:
+- В общем случае \(S_c\) и \(V_c\) зависят от параметров \(\theta\) через маппинг актуаторов, поэтому \(\nabla_\theta F\) включает производные \(\partial S_{c_i}/\partial \theta\) и \(\partial V_c/\partial \theta\).
+- В MVP‑варианте, когда отдельные компоненты сложности параметризуются напрямую (например, \(S_{c_i}(t) \equiv \theta_i(t)\) или \(V_c(t) \equiv \theta_v(t)\)), квадратичная форма даёт простой градиент вида:
+  - \(\frac{\partial F}{\partial \theta_i} = 2 w_i (\theta_i - S_{p_i})\),
+  - \(\frac{\partial F}{\partial \theta_v} = 2 \alpha (\theta_v - V_p)\).
+- Это удобно для реализации «параллельного градиентного спуска» по компонентам.
 ```
 
 ---
 
-## Folder Structure
+## Структура папок
 
-- **All classes of the author's algorithm (SGD/DDA)** must be in a **separate folder** in the project (e.g., `SgdEngine/`).
-- Sensors, actuators, and SGD decision module — only in this folder.
-- `CheatManager/` — shared infrastructure (console, overlay, state).
-- `GeneticEngine/` — genetic algorithm source code (reference, do not touch).
+- **Все классы алгоритма автора (SGD/DDA)** должны находиться в **отдельной папке** проекта (например, `SgdEngine/` или `DdaEngine/`).
+- Сенсоры, актуаторы и модуль решений SGD — только в этой папке.
+- `CheatManager/` — общая инфраструктура (консольные команды, оверлей, состояние).
+- `GeneticEngine/` — исходники генетического алгоритма (референс, не трогать).
 
-## Genetic Algorithm Protection
+## Защита генетического движка
 
-- **Do not modify** source files in `GeneticEngine/`: `GeneEngineDriver.cs`, `MasterGeneBehaviour.cs`, `MonsterGeneBehaviour.cs`, `GeneTokenCalc.cs`, `GeneTokens.cs`.
-- Exception: only **critically necessary** changes (e.g., fixing a bug that blocks the project, or a minimal integration point at explicit user request).
-- SGD integration — via `DdaAlgorithmState.ActiveAlgorithm`, a separate driver, hooks in `GeneticsArtifactPlugin`; **not** by modifying `GeneEngineDriver` and related classes.
-
----
-
-## Style and Principles
-
-- **SOLID, KISS:** one class — one responsibility, simple interfaces
-- **Naming:** prefix `Sgd` for new DDA classes; `Gene` — for genetic algorithm
-- **Namespace:** `GeneticsArtifact` for main code; `GeneticsArtifact.CheatManager` for CheatManager
-- **Cleanup:** remove unused code
-- **Commits:** after each logical part (sensors, actuators, decision module)
+- **Не модифицировать** файлы в `GeneticEngine/`: `GeneEngineDriver.cs`, `MasterGeneBehaviour.cs`, `MonsterGeneBehaviour.cs`, `GeneTokenCalc.cs`, `GeneTokens.cs`.
+- Исключение: только **критически необходимые** изменения (блокирующий баг или минимальная точка интеграции по явному запросу).
+- Интеграция SGD — через `DdaAlgorithmState.ActiveAlgorithm`, отдельный драйвер и хуки в `GeneticsArtifactPlugin`, **без** вмешательства в `GeneEngineDriver` и связанные классы.
 
 ---
 
-## Debugging
+## Стиль и принципы
 
-- Console: `dda_genetics 1`, `dda_algorithm sgd`, `dda_debug_overlay 1`
-- Logs: `GeneticsArtifactPlugin.geneticLogSource` in BepInEx/LogOutput.log
-- Debug overlay: `DebugOverlayBehaviour` — extend to display sensor metrics and SGD parameters
-- `#if DEBUG` — additional logging in debug builds
+- **SOLID, KISS**: один класс — одна ответственность; простые интерфейсы.
+- **Именование**: префикс `Sgd` для новых DDA‑классов; `Gene` — для генетического алгоритма.
+- **Namespace**: `GeneticsArtifact` для основного кода; `GeneticsArtifact.CheatManager` для CheatManager.
+- **Чистка**: удалять неиспользуемый код.
+- **Коммиты**: после каждого логического блока (сенсоры, актуаторы, модуль решений).
 
 ---
 
-## Integration with Existing Code
+## Отладка
 
-- When `ActiveAlgorithm == Sgd` — use a **separate SGD driver** in its own folder, without modifying `GeneEngineDriver`.
-- Entry point: `GeneticsArtifactPlugin.Awake` — initialize SGD driver when `ActiveAlgorithm == Sgd`; Run_Start, CharacterBody_Start hooks — in a separate class.
-- Artifact `ArtifactOfGenetics` remains shared; enable/disable — via `dda_genetics` and `RunArtifactManager`.
+- Консоль: `dda_genetics 1`, `dda_algorithm sgd`, `dda_debug_overlay 1`.
+- Логи: `GeneticsArtifactPlugin.geneticLogSource` в `BepInEx/LogOutput.log`.
+- Оверлей: `DebugOverlayBehaviour` — расширять для вывода метрик сенсоров и параметров \(\theta\).
+- `#if DEBUG` — дополнительное логирование в debug‑сборках.
+
+---
+
+## Интеграция с текущим кодом
+
+- Когда `ActiveAlgorithm == Sgd` — использовать **отдельный SGD‑драйвер** в собственной папке, не модифицируя `GeneEngineDriver`.
+- Точка входа: `GeneticsArtifactPlugin.Awake` — инициализировать SGD‑драйвер только для режима `Sgd`; хуки Run_Start, CharacterBody_Start и т.п. — в отдельном классе драйвера.
+- Артефакт `ArtifactOfGenetics` остаётся общим: включение/выключение — через `dda_genetics` и `RunArtifactManager`.
+- Важно: команда `dda_algorithm sgd` сейчас переключает состояние (`DdaAlgorithmState.ActiveAlgorithm = Sgd`), но в текущем коде SGD‑логика помечена как «not yet implemented» — документация описывает целевую архитектуру и математику диссертации.
