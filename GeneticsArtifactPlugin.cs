@@ -2,6 +2,7 @@ using BepInEx;
 using BepInEx.Bootstrap;
 using BepInEx.Logging;
 using GeneticsArtifact.CheatManager;
+using GeneticsArtifact.SgdEngine;
 using R2API.Utils;
 using System.Reflection;
 using UnityEngine;
@@ -42,6 +43,7 @@ namespace GeneticsArtifact
             GeneTokens.Init();
             GeneTokenCalc.RegisterHooks();
             GeneEngineDriver.RegisterHooks();
+            SgdRuntimeDriver.RegisterHooks();
 
             foreach (PluginInfo plugin in Chainloader.PluginInfos.Values) { if (plugin.Metadata.GUID.Equals("com.rune580.riskofoptions")) { RiskOfOptionsCompat.Init(); break; } }
         }

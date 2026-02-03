@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using GeneticsArtifact.SgdEngine;
 
 namespace GeneticsArtifact.CheatManager
 {
@@ -83,7 +84,23 @@ namespace GeneticsArtifact.CheatManager
             if (_updateTimer >= 0.5f)
             {
                 _updateTimer = 0f;
-                _textComponent.text = $"[DDA Debug] Random: {Random.Range(0, 100)}\nTime: {Time.time:F1}s";
+
+                if (SgdRuntimeState.HasVirtualPower)
+                {
+                    var vp = SgdRuntimeState.VirtualPower;
+                    _textComponent.text =
+                        $"[DDA Debug]\n" +
+                        $"Time: {Time.time:F1}s\n" +
+                        $"V_p(body): {SgdRuntimeState.VirtualPowerBodyName}\n" +
+                        $"V_p.offense: {vp.Offense:F3}\n" +
+                        $"V_p.defense: {vp.Defense:F3}\n" +
+                        $"V_p.mobility: {vp.Mobility:F3}\n" +
+                        $"V_p.total: {vp.Total:F3}";
+                }
+                else
+                {
+                    _textComponent.text = $"[DDA Debug]\nTime: {Time.time:F1}s\nV_p: N/A (enable SGD or start a run)";
+                }
             }
         }
     }
