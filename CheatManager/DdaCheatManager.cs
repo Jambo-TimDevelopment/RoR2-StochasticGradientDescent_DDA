@@ -3,6 +3,7 @@ using RoR2;
 using System.Globalization;
 using GeneticsArtifact.SgdEngine.Actuators;
 using UnityEngine;
+using UnityEngine.Networking;
 
 namespace GeneticsArtifact.CheatManager
 {
@@ -88,12 +89,12 @@ namespace GeneticsArtifact.CheatManager
             Debug.Log("[DDA] dda_param: Not yet implemented. Use config file for now.");
         }
 
-        [ConCommand(commandName = "dda_sgd_hp", helpText = "Set SGD actuator: monster MaxHealth multiplier for NEW spawns. Usage: dda_sgd_hp <multiplier>")]
+        [ConCommand(commandName = "dda_sgd_hp", helpText = "Set SGD actuator: monster MaxHealth multiplier. Applies to existing monsters on level and future spawns. Usage: dda_sgd_hp <multiplier>")]
         private static void OnSgdHpCommand(ConCommandArgs args)
         {
             if (args.Count <= 0)
             {
-                Debug.Log($"[DDA] SGD HP multiplier (new spawns): {SgdActuatorsRuntimeState.MaxHealthMultiplier:F2}");
+                Debug.Log($"[DDA] SGD HP multiplier: {SgdActuatorsRuntimeState.MaxHealthMultiplier:F2}");
                 return;
             }
 
@@ -104,7 +105,15 @@ namespace GeneticsArtifact.CheatManager
             }
 
             SgdActuatorsRuntimeState.SetMaxHealthMultiplier(mult);
-            Debug.Log($"[DDA] SGD actuator set: MaxHealth multiplier (new spawns) = {SgdActuatorsRuntimeState.MaxHealthMultiplier:F2}. Tip: run 'dda_genetics 0' to avoid genetic engine interference.");
+
+            if (!NetworkServer.active)
+            {
+                Debug.Log($"[DDA] SGD actuator set: MaxHealth multiplier = {SgdActuatorsRuntimeState.MaxHealthMultiplier:F2}. (Not applied now: NetworkServer is not active)");
+                return;
+            }
+
+            int applied = SgdActuatorsApplier.ApplyToAllLivingMonsters();
+            Debug.Log($"[DDA] SGD actuator set: MaxHealth multiplier = {SgdActuatorsRuntimeState.MaxHealthMultiplier:F2}. Applied to {applied} existing monsters; will apply to future spawns. Tip: run 'dda_genetics 0' to avoid genetic engine interference.");
         }
 
         private static bool TryParseFloat(string s, out float value)
