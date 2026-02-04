@@ -191,7 +191,8 @@ namespace GeneticsArtifact.CheatManager
 
         private sealed class HpLabel : MonoBehaviour
         {
-            private const float BaseHeightOffset = 0.35f;
+            // Lift HP numbers above the vanilla overhead healthbar.
+            private const float BaseHeightOffset = 0.80f;
             private const float CharacterSize = 0.08f;
 
             public CharacterBody Body { get; set; }
@@ -207,7 +208,7 @@ namespace GeneticsArtifact.CheatManager
                 _text.alignment = TextAlignment.Center;
                 _text.fontSize = 48;
                 _text.characterSize = CharacterSize;
-                _text.color = Color.white;
+                _text.color = new Color32(0, 255, 0, 255);
                 _text.richText = false;
 
                 RefreshText();
