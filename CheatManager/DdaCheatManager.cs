@@ -1,5 +1,7 @@
 using R2API.Utils;
 using RoR2;
+using System.Globalization;
+using GeneticsArtifact.SgdEngine.Actuators;
 using UnityEngine;
 
 namespace GeneticsArtifact.CheatManager
@@ -84,6 +86,37 @@ namespace GeneticsArtifact.CheatManager
         private static void OnParamCommand(ConCommandArgs args)
         {
             Debug.Log("[DDA] dda_param: Not yet implemented. Use config file for now.");
+        }
+
+        [ConCommand(commandName = "dda_sgd_hp", helpText = "Set SGD actuator: monster MaxHealth multiplier for NEW spawns. Usage: dda_sgd_hp <multiplier>")]
+        private static void OnSgdHpCommand(ConCommandArgs args)
+        {
+            if (args.Count <= 0)
+            {
+                Debug.Log($"[DDA] SGD HP multiplier (new spawns): {SgdActuatorsRuntimeState.MaxHealthMultiplier:F2}");
+                return;
+            }
+
+            if (!TryParseFloat(args[0], out float mult))
+            {
+                Debug.Log("[DDA] Usage: dda_sgd_hp <multiplier>. Example: dda_sgd_hp 1.50");
+                return;
+            }
+
+            SgdActuatorsRuntimeState.SetMaxHealthMultiplier(mult);
+            Debug.Log($"[DDA] SGD actuator set: MaxHealth multiplier (new spawns) = {SgdActuatorsRuntimeState.MaxHealthMultiplier:F2}. Tip: run 'dda_genetics 0' to avoid genetic engine interference.");
+        }
+
+        private static bool TryParseFloat(string s, out float value)
+        {
+            if (float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+            {
+                return true;
+            }
+
+            // Common locale fallback (comma decimal separator).
+            s = s?.Replace(',', '.');
+            return float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
         }
     }
 }
