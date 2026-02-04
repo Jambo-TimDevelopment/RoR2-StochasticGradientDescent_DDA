@@ -88,14 +88,35 @@ namespace GeneticsArtifact.CheatManager
                 if (SgdRuntimeState.HasVirtualPower)
                 {
                     var vp = SgdRuntimeState.VirtualPower;
+
+                    string sensorsText;
+                    if (SgdSensorsRuntimeState.HasSample)
+                    {
+                        var s = SgdSensorsRuntimeState.Sample;
+                        sensorsText =
+                            $"Sensors:\n" +
+                            $"IncomingDPS: {s.IncomingDamageRate:F1}\n" +
+                            $"OutgoingDPS: {s.OutgoingDamageRate:F1}\n" +
+                            $"HitRate: {s.HitRateOnPlayer:F2}/s\n" +
+                            $"CombatUptime: {s.CombatUptime:P0}\n" +
+                            $"LowHPUptime: {s.LowHealthUptime:P0}\n" +
+                            $"Deaths/W: {s.DeathsPerWindow:F0}\n" +
+                            $"AvgTTK: {s.AvgTtkSeconds:F2}s\n";
+                    }
+                    else
+                    {
+                        sensorsText = "Sensors: N/A\n";
+                    }
+
                     _textComponent.text =
                         $"[DDA Debug]\n" +
                         $"Time: {Time.time:F1}s\n" +
-                        $"V_p(body): {SgdRuntimeState.VirtualPowerBodyName}\n" +
+                        $"Body: {SgdRuntimeState.VirtualPowerBodyName}\n" +
                         $"V_p.offense: {vp.Offense:F3}\n" +
                         $"V_p.defense: {vp.Defense:F3}\n" +
                         $"V_p.mobility: {vp.Mobility:F3}\n" +
-                        $"V_p.total: {vp.Total:F3}";
+                        $"V_p.total: {vp.Total:F3}\n\n" +
+                        sensorsText;
                 }
                 else
                 {

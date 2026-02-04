@@ -18,6 +18,7 @@ namespace GeneticsArtifact.SgdEngine
         public static void RegisterHooks()
         {
             On.RoR2.Run.Start += Run_Start;
+            SgdSensorsHooks.RegisterHooks();
         }
 
         private static void Run_Start(On.RoR2.Run.orig_Start orig, Run self)
@@ -60,6 +61,7 @@ namespace GeneticsArtifact.SgdEngine
             if (body == null)
             {
                 SgdRuntimeState.Clear();
+                SgdSensorsRuntimeState.Clear();
                 _trackedBody = null;
                 _vpEstimator.Reset();
                 return;
@@ -73,6 +75,8 @@ namespace GeneticsArtifact.SgdEngine
 
             var sample = _vpEstimator.ComputeSmoothed(body, Time.deltaTime);
             SgdRuntimeState.SetVirtualPower(sample, body);
+
+            SgdSensorsHooks.Tick(body, Time.deltaTime);
         }
 
         private static CharacterBody FindAnyPlayerBody()
