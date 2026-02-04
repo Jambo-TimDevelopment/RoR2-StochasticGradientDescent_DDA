@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using GeneticsArtifact.SgdEngine;
+using GeneticsArtifact.SgdEngine.Actuators;
 
 namespace GeneticsArtifact.CheatManager
 {
@@ -70,7 +71,7 @@ namespace GeneticsArtifact.CheatManager
             rectTransform.anchorMin = new Vector2(0.02f, 0.98f);
             rectTransform.anchorMax = new Vector2(0.98f, 0.98f);
             rectTransform.pivot = new Vector2(0.5f, 1f);
-            rectTransform.sizeDelta = new Vector2(-40, 200);
+            rectTransform.sizeDelta = new Vector2(-40, 320);
             rectTransform.anchoredPosition = Vector2.zero;
 
             _instance = _overlayRoot.AddComponent<DebugOverlayBehaviour>();
@@ -84,6 +85,10 @@ namespace GeneticsArtifact.CheatManager
             if (_updateTimer >= 0.5f)
             {
                 _updateTimer = 0f;
+
+                string actuatorsText =
+                    "Actuators (new spawns):\n" +
+                    $"MaxHealthMult: {SgdActuatorsRuntimeState.MaxHealthMultiplier:F2}\n";
 
                 if (SgdRuntimeState.HasVirtualPower)
                 {
@@ -116,11 +121,16 @@ namespace GeneticsArtifact.CheatManager
                         $"V_p.defense: {vp.Defense:F3}\n" +
                         $"V_p.mobility: {vp.Mobility:F3}\n" +
                         $"V_p.total: {vp.Total:F3}\n\n" +
+                        actuatorsText + "\n" +
                         sensorsText;
                 }
                 else
                 {
-                    _textComponent.text = $"[DDA Debug]\nTime: {Time.time:F1}s\nV_p: N/A (enable SGD or start a run)";
+                    _textComponent.text =
+                        $"[DDA Debug]\n" +
+                        $"Time: {Time.time:F1}s\n" +
+                        "V_p: N/A (enable SGD or start a run)\n\n" +
+                        actuatorsText;
                 }
             }
         }
