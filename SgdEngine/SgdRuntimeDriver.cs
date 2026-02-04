@@ -76,7 +76,7 @@ namespace GeneticsArtifact.SgdEngine
             var sample = _vpEstimator.ComputeSmoothed(body, Time.deltaTime);
             SgdRuntimeState.SetVirtualPower(sample, body);
 
-            SgdSensorsHooks.Tick(body, Time.deltaTime);
+            SgdSensorsHooks.Tick(body, Time.deltaTime, sample);
         }
 
         private static CharacterBody FindAnyPlayerBody()

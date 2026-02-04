@@ -17,6 +17,16 @@ namespace GeneticsArtifact.SgdEngine
         // Threshold for low-health uptime sensor.
         public const float DefaultLowHealthThreshold = 0.30f;
 
+        // Normalization targets/scales (tuned for stability, not for perfect accuracy).
+        // Incoming damage is normalized relative to player's V_p.defense as "damage over target TTD".
+        public const float TargetTimeToDieSeconds = 10f;
+
+        // AvgTTK is normalized relative to a target time-to-kill.
+        public const float TargetTtkSeconds = 8f;
+
+        // Hit-rate scale for the 0..1 compression.
+        public const float HitRateScalePerSecond = 1.5f;
+
         private readonly float _tauSeconds;
         private readonly float _windowSeconds;
         private readonly float _lowHealthThreshold;
@@ -134,20 +144,46 @@ namespace GeneticsArtifact.SgdEngine
             PruneOldDeathTimes(now);
         }
 
-        public SgdSensorsSample GetCurrentSample()
+        public SgdSensorsSample GetCurrentSample(in SgdVirtualPowerSample vp)
         {
             float now = Time.time;
             PruneOldDeathTimes(now);
 
             float deathsPerWindow = _playerDeathTimes.Count;
+
+            float incomingDps = Sanitize(_incomingDamageRateEma);
+            float outgoingDps = Sanitize(_outgoingDamageRateEma);
+            float hitRate = Sanitize(_hitRateOnPlayerEma);
+            float combatUptime = Mathf.Clamp01(Sanitize(_combatUptimeEma));
+            float lowHealthUptime = Mathf.Clamp01(Sanitize(_lowHealthUptimeEma));
+            float avgTtkSeconds = Sanitize(_avgTtkSecondsEma);
+
+            // Recover baseline raw proxies from log-compressed V_p components:
+            // vp.Component = log(1 + ComponentRaw)  => ComponentRaw = exp(vp.Component) - 1
+            float offenseBaselineRaw = Mathf.Max(1f, SafeExpm1(vp.Offense));
+            float defenseBaselineRaw = Mathf.Max(1f, SafeExpm1(vp.Defense));
+
+            // Normalize into [0,1) with exponential compression:
+            // norm01 = 1 - exp(-x), where x is a non-negative scaled ratio.
+            float incomingNorm = Normalize01(incomingDps * TargetTimeToDieSeconds / defenseBaselineRaw);
+            float outgoingNorm = Normalize01(outgoingDps / offenseBaselineRaw);
+            float hitRateNorm = Normalize01(hitRate / HitRateScalePerSecond);
+            float deathsNorm = Normalize01(deathsPerWindow);
+            float ttkNorm = Normalize01(avgTtkSeconds / TargetTtkSeconds);
+
             return new SgdSensorsSample(
-                incomingDamageRate: Sanitize(_incomingDamageRateEma),
-                outgoingDamageRate: Sanitize(_outgoingDamageRateEma),
-                hitRateOnPlayer: Sanitize(_hitRateOnPlayerEma),
-                combatUptime: Mathf.Clamp01(Sanitize(_combatUptimeEma)),
-                lowHealthUptime: Mathf.Clamp01(Sanitize(_lowHealthUptimeEma)),
+                incomingDamageRate: incomingDps,
+                incomingDamageNorm01: incomingNorm,
+                outgoingDamageRate: outgoingDps,
+                outgoingDamageNorm01: outgoingNorm,
+                hitRateOnPlayer: hitRate,
+                hitRateOnPlayerNorm01: hitRateNorm,
+                combatUptime: combatUptime,
+                lowHealthUptime: lowHealthUptime,
                 deathsPerWindow: deathsPerWindow,
-                avgTtkSeconds: Sanitize(_avgTtkSecondsEma)
+                deathsPerWindowNorm01: deathsNorm,
+                avgTtkSeconds: avgTtkSeconds,
+                avgTtkSecondsNorm01: ttkNorm
             );
         }
 
@@ -218,6 +254,25 @@ namespace GeneticsArtifact.SgdEngine
         {
             if (float.IsNaN(x) || float.IsInfinity(x)) return 0f;
             return Mathf.Max(0f, x);
+        }
+
+        private static float SafeExpm1(float log1pX)
+        {
+            if (float.IsNaN(log1pX) || float.IsInfinity(log1pX) || log1pX <= 0f) return 0f;
+            // Typical values are small (log1p), but clamp anyway for safety.
+            log1pX = Mathf.Clamp(log1pX, 0f, 25f);
+            float x = Mathf.Exp(log1pX) - 1f;
+            if (float.IsNaN(x) || float.IsInfinity(x)) return 0f;
+            return Mathf.Max(0f, x);
+        }
+
+        private static float Normalize01(float x)
+        {
+            if (float.IsNaN(x) || float.IsInfinity(x) || x <= 0f) return 0f;
+            x = Mathf.Clamp(x, 0f, 100f);
+            float y = 1f - Mathf.Exp(-x);
+            if (float.IsNaN(y) || float.IsInfinity(y)) return 0f;
+            return Mathf.Clamp01(y);
         }
     }
 }

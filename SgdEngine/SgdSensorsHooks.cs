@@ -25,7 +25,7 @@ namespace GeneticsArtifact.SgdEngine
             SgdSensorsRuntimeState.Clear();
         }
 
-        public static void Tick(CharacterBody playerBody, float dt)
+        public static void Tick(CharacterBody playerBody, float dt, in SgdVirtualPowerSample vp)
         {
             if (DdaAlgorithmState.ActiveAlgorithm != DdaAlgorithmType.Sgd && !DdaAlgorithmState.IsDebugOverlayEnabled)
             {
@@ -44,7 +44,7 @@ namespace GeneticsArtifact.SgdEngine
             }
 
             _estimator.TickPlayerBody(playerBody, dt);
-            SgdSensorsRuntimeState.Set(_estimator.GetCurrentSample(), playerBody);
+            SgdSensorsRuntimeState.Set(_estimator.GetCurrentSample(vp), playerBody);
         }
 
         private static void HealthComponent_TakeDamage(On.RoR2.HealthComponent.orig_TakeDamage orig, HealthComponent self, DamageInfo damageInfo)

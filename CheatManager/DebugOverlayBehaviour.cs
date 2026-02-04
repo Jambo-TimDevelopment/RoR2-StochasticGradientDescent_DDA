@@ -95,13 +95,13 @@ namespace GeneticsArtifact.CheatManager
                         var s = SgdSensorsRuntimeState.Sample;
                         sensorsText =
                             $"Sensors:\n" +
-                            $"IncomingDPS: {s.IncomingDamageRate:F1}\n" +
-                            $"OutgoingDPS: {s.OutgoingDamageRate:F1}\n" +
-                            $"HitRate: {s.HitRateOnPlayer:F2}/s\n" +
+                            $"IncomingDPS: {s.IncomingDamageRate:F1} (n={s.IncomingDamageNorm01:F2})\n" +
+                            $"OutgoingDPS: {s.OutgoingDamageRate:F1} (n={s.OutgoingDamageNorm01:F2})\n" +
+                            $"HitRate: {s.HitRateOnPlayer:F2}/s (n={s.HitRateOnPlayerNorm01:F2})\n" +
                             $"CombatUptime: {s.CombatUptime:P0}\n" +
                             $"LowHPUptime: {s.LowHealthUptime:P0}\n" +
-                            $"Deaths/W: {s.DeathsPerWindow:F0}\n" +
-                            $"AvgTTK: {s.AvgTtkSeconds:F2}s\n";
+                            $"Deaths/W: {s.DeathsPerWindow:F0} (n={s.DeathsPerWindowNorm01:F2})\n" +
+                            $"AvgTTK: {s.AvgTtkSeconds:F2}s (n={s.AvgTtkSecondsNorm01:F2})\n";
                     }
                     else
                     {
