@@ -29,6 +29,9 @@ namespace GeneticsArtifact.SgdEngine.Actuators
                 if (body.inventory == null) continue;
 
                 SgdGeneStatTokenApplier.ApplyMultiplier(body.inventory, GeneStat.MaxHealth, SgdActuatorsRuntimeState.MaxHealthMultiplier);
+                SgdGeneStatTokenApplier.ApplyMultiplier(body.inventory, GeneStat.MoveSpeed, SgdActuatorsRuntimeState.MoveSpeedMultiplier);
+                SgdGeneStatTokenApplier.ApplyMultiplier(body.inventory, GeneStat.AttackSpeed, SgdActuatorsRuntimeState.AttackSpeedMultiplier);
+                SgdGeneStatTokenApplier.ApplyMultiplier(body.inventory, GeneStat.AttackDamage, SgdActuatorsRuntimeState.AttackDamageMultiplier);
                 body.RecalculateStats();
                 applied++;
             }

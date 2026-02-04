@@ -1,5 +1,6 @@
 using R2API.Utils;
 using RoR2;
+using System;
 using System.Globalization;
 using GeneticsArtifact.SgdEngine.Actuators;
 using UnityEngine;
@@ -92,30 +93,45 @@ namespace GeneticsArtifact.CheatManager
         [ConCommand(commandName = "dda_sgd_hp", helpText = "Set SGD actuator: monster MaxHealth multiplier. Applies to existing monsters on level and future spawns. Usage: dda_sgd_hp <multiplier>")]
         private static void OnSgdHpCommand(ConCommandArgs args)
         {
-            if (args.Count <= 0)
-            {
-                Debug.Log($"[DDA] SGD HP multiplier: {SgdActuatorsRuntimeState.MaxHealthMultiplier:F2}");
-                return;
-            }
+            HandleSgdActuatorFloatCommand(
+                args,
+                commandName: "dda_sgd_hp",
+                statDisplayName: "HP (MaxHealth)",
+                getValue: () => SgdActuatorsRuntimeState.MaxHealthMultiplier,
+                setValue: SgdActuatorsRuntimeState.SetMaxHealthMultiplier);
+        }
 
-            if (!TryParseFloat(args[0], out float mult))
-            {
-                Debug.Log("[DDA] Usage: dda_sgd_hp <multiplier>. Example: dda_sgd_hp 1.50");
-                return;
-            }
+        [ConCommand(commandName = "dda_sgd_ms", helpText = "Set SGD actuator: monster MoveSpeed multiplier. Applies to existing monsters on level and future spawns. Usage: dda_sgd_ms <multiplier>")]
+        private static void OnSgdMoveSpeedCommand(ConCommandArgs args)
+        {
+            HandleSgdActuatorFloatCommand(
+                args,
+                commandName: "dda_sgd_ms",
+                statDisplayName: "MS (MoveSpeed)",
+                getValue: () => SgdActuatorsRuntimeState.MoveSpeedMultiplier,
+                setValue: SgdActuatorsRuntimeState.SetMoveSpeedMultiplier);
+        }
 
-            // Convenience: this command implies we want SGD behavior active.
-            DdaAlgorithmState.ActiveAlgorithm = DdaAlgorithmType.Sgd;
-            SgdActuatorsRuntimeState.SetMaxHealthMultiplier(mult);
+        [ConCommand(commandName = "dda_sgd_as", helpText = "Set SGD actuator: monster AttackSpeed multiplier. Applies to existing monsters on level and future spawns. Usage: dda_sgd_as <multiplier>")]
+        private static void OnSgdAttackSpeedCommand(ConCommandArgs args)
+        {
+            HandleSgdActuatorFloatCommand(
+                args,
+                commandName: "dda_sgd_as",
+                statDisplayName: "AS (AttackSpeed)",
+                getValue: () => SgdActuatorsRuntimeState.AttackSpeedMultiplier,
+                setValue: SgdActuatorsRuntimeState.SetAttackSpeedMultiplier);
+        }
 
-            if (!NetworkServer.active)
-            {
-                Debug.Log($"[DDA] SGD actuator set: MaxHealth multiplier = {SgdActuatorsRuntimeState.MaxHealthMultiplier:F2}. (Not applied now: NetworkServer is not active)");
-                return;
-            }
-
-            int applied = SgdActuatorsApplier.ApplyToAllLivingMonsters();
-            Debug.Log($"[DDA] SGD actuator set: MaxHealth multiplier = {SgdActuatorsRuntimeState.MaxHealthMultiplier:F2}. Applied to {applied} existing monsters; will apply to future spawns. Tip: run 'dda_genetics 0' to avoid genetic engine interference.");
+        [ConCommand(commandName = "dda_sgd_dmg", helpText = "Set SGD actuator: monster AttackDamage multiplier. Applies to existing monsters on level and future spawns. Usage: dda_sgd_dmg <multiplier>")]
+        private static void OnSgdAttackDamageCommand(ConCommandArgs args)
+        {
+            HandleSgdActuatorFloatCommand(
+                args,
+                commandName: "dda_sgd_dmg",
+                statDisplayName: "DMG (AttackDamage)",
+                getValue: () => SgdActuatorsRuntimeState.AttackDamageMultiplier,
+                setValue: SgdActuatorsRuntimeState.SetAttackDamageMultiplier);
         }
 
         private static bool TryParseFloat(string s, out float value)
@@ -128,6 +144,40 @@ namespace GeneticsArtifact.CheatManager
             // Common locale fallback (comma decimal separator).
             s = s?.Replace(',', '.');
             return float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+        }
+
+        private static void HandleSgdActuatorFloatCommand(
+            ConCommandArgs args,
+            string commandName,
+            string statDisplayName,
+            Func<float> getValue,
+            Action<float> setValue)
+        {
+            if (args.Count <= 0)
+            {
+                Debug.Log($"[DDA] SGD {statDisplayName} multiplier: {getValue():F2}");
+                return;
+            }
+
+            if (!TryParseFloat(args[0], out float mult))
+            {
+                Debug.Log($"[DDA] Usage: {commandName} <multiplier>. Example: {commandName} 1.50");
+                return;
+            }
+
+            // Convenience: these commands imply we want SGD behavior active.
+            DdaAlgorithmState.ActiveAlgorithm = DdaAlgorithmType.Sgd;
+            setValue(mult);
+
+            float clamped = getValue();
+            if (!NetworkServer.active)
+            {
+                Debug.Log($"[DDA] SGD actuator set: {statDisplayName} multiplier = {clamped:F2}. (Not applied now: NetworkServer is not active)");
+                return;
+            }
+
+            int applied = SgdActuatorsApplier.ApplyToAllLivingMonsters();
+            Debug.Log($"[DDA] SGD actuator set: {statDisplayName} multiplier = {clamped:F2}. Applied to {applied} existing monsters; will apply to future spawns. Tip: run 'dda_genetics 0' to avoid genetic engine interference.");
         }
 
         [ConCommand(commandName = "dda_monster_hp", helpText = "Toggle HP numbers above monsters (client-side). Usage: dda_monster_hp [0|1]")]

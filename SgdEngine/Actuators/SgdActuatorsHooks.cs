@@ -38,8 +38,11 @@ namespace GeneticsArtifact.SgdEngine.Actuators
                 return;
             }
 
-            // MVP: apply only MaxHealth multiplier.
+            // Apply all GeneStat multipliers for the current θ.
             SgdGeneStatTokenApplier.ApplyMultiplier(self.inventory, GeneStat.MaxHealth, SgdActuatorsRuntimeState.MaxHealthMultiplier);
+            SgdGeneStatTokenApplier.ApplyMultiplier(self.inventory, GeneStat.MoveSpeed, SgdActuatorsRuntimeState.MoveSpeedMultiplier);
+            SgdGeneStatTokenApplier.ApplyMultiplier(self.inventory, GeneStat.AttackSpeed, SgdActuatorsRuntimeState.AttackSpeedMultiplier);
+            SgdGeneStatTokenApplier.ApplyMultiplier(self.inventory, GeneStat.AttackDamage, SgdActuatorsRuntimeState.AttackDamageMultiplier);
             self.RecalculateStats();
         }
     }

@@ -88,7 +88,10 @@ namespace GeneticsArtifact.CheatManager
 
                 string actuatorsText =
                     "Actuators:\n" +
-                    $"MaxHealthMult: {SgdActuatorsRuntimeState.MaxHealthMultiplier:F2}\n";
+                    $"HP (MaxHealth): {SgdActuatorsRuntimeState.MaxHealthMultiplier:F2}\n" +
+                    $"MS (MoveSpeed): {SgdActuatorsRuntimeState.MoveSpeedMultiplier:F2}\n" +
+                    $"AS (AttackSpeed): {SgdActuatorsRuntimeState.AttackSpeedMultiplier:F2}\n" +
+                    $"DMG (AttackDamage): {SgdActuatorsRuntimeState.AttackDamageMultiplier:F2}\n";
 
                 if (SgdRuntimeState.HasVirtualPower)
                 {
