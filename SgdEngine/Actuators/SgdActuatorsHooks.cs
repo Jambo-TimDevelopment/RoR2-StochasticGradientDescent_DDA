@@ -28,11 +28,6 @@ namespace GeneticsArtifact.SgdEngine.Actuators
                 return;
             }
 
-            if (RunArtifactManager.instance == null || !RunArtifactManager.instance.IsArtifactEnabled(ArtifactOfGenetics.artifactDef))
-            {
-                return;
-            }
-
             if (self.teamComponent == null || self.teamComponent.teamIndex != TeamIndex.Monster)
             {
                 return;

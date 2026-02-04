@@ -104,6 +104,8 @@ namespace GeneticsArtifact.CheatManager
                 return;
             }
 
+            // Convenience: this command implies we want SGD behavior active.
+            DdaAlgorithmState.ActiveAlgorithm = DdaAlgorithmType.Sgd;
             SgdActuatorsRuntimeState.SetMaxHealthMultiplier(mult);
 
             if (!NetworkServer.active)

@@ -87,7 +87,7 @@ namespace GeneticsArtifact.CheatManager
                 _updateTimer = 0f;
 
                 string actuatorsText =
-                    "Actuators (new spawns):\n" +
+                    "Actuators:\n" +
                     $"MaxHealthMult: {SgdActuatorsRuntimeState.MaxHealthMultiplier:F2}\n";
 
                 if (SgdRuntimeState.HasVirtualPower)

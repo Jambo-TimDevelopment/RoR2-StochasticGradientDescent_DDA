@@ -247,11 +247,11 @@ namespace GeneticsArtifact.CheatManager
 
                 if (cam != null)
                 {
-                    // Face the camera.
+                    // Face the camera (use -toCam so text is not mirrored/backwards).
                     Vector3 toCam = cam.transform.position - t.position;
                     if (toCam.sqrMagnitude > 0.0001f)
                     {
-                        t.rotation = Quaternion.LookRotation(toCam);
+                        t.rotation = Quaternion.LookRotation(-toCam);
                     }
                 }
             }

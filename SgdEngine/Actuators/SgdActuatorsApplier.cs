@@ -21,11 +21,6 @@ namespace GeneticsArtifact.SgdEngine.Actuators
                 return 0;
             }
 
-            if (RunArtifactManager.instance == null || !RunArtifactManager.instance.IsArtifactEnabled(ArtifactOfGenetics.artifactDef))
-            {
-                return 0;
-            }
-
             int applied = 0;
             foreach (var body in CharacterBody.readOnlyInstancesList)
             {
