@@ -127,5 +127,28 @@ namespace GeneticsArtifact.CheatManager
             s = s?.Replace(',', '.');
             return float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
         }
+
+        [ConCommand(commandName = "dda_monster_hp", helpText = "Toggle HP numbers above monsters (client-side). Usage: dda_monster_hp [0|1]")]
+        private static void OnMonsterHpOverlay(ConCommandArgs args)
+        {
+            if (args.Count > 0)
+            {
+                if (int.TryParse(args[0], out int value))
+                {
+                    MonsterHpOverheadDriver.SetEnabled(value != 0);
+                }
+                else
+                {
+                    Debug.Log("[DDA] Usage: dda_monster_hp [0|1]");
+                    return;
+                }
+            }
+            else
+            {
+                MonsterHpOverheadDriver.SetEnabled(!MonsterHpOverheadDriver.IsEnabled);
+            }
+
+            Debug.Log($"[DDA] Monster HP overhead: {(MonsterHpOverheadDriver.IsEnabled ? "ENABLED" : "DISABLED")}");
+        }
     }
 }
