@@ -266,3 +266,23 @@ F(t) = Σ_i [ w_i · (S_c_i(t) - S_p_i(t))² ] + α · (V_c(t) - V_p(t))²
 - Точка входа: `GeneticsArtifactPlugin.Awake` — инициализировать SGD‑драйвер только для режима `Sgd`; хуки Run_Start, CharacterBody_Start и т.п. — в отдельном классе драйвера.
 - Артефакт `ArtifactOfGenetics` остаётся общим: включение/выключение — через `dda_genetics` и `RunArtifactManager`.
 - Важно: команда `dda_algorithm sgd` сейчас переключает состояние (`DdaAlgorithmState.ActiveAlgorithm = Sgd`), но в текущем коде SGD‑логика помечена как «not yet implemented» — документация описывает целевую архитектуру и математику диссертации.
+
+---
+
+## Деплой после сборки
+
+- После **успешной сборки** мода нужно копировать собранный **.dll** в папку плагинов RoR2 (`BepInEx/plugins`), чтобы сразу запускать игру с обновлённым модом.
+- В проекте настроен пост‑сборочный шаг (`tools/InstallToRor2.ps1`), который **пытается автоматически** установить `GeneticsArtifact.dll` после `dotnet build`.
+
+### Как работает авто‑установка
+- Если задана `ROR2_PLUGINS_PATH` — `.dll` копируется туда (удобно для Thunderstore/r2modman профилей).
+- Иначе скрипт пытается найти папку RoR2 через Steam (libraryfolders.vdf) или через переменные `ROR2_GAME_PATH` / `ROR2_DIR` / `ROR2_PATH`.
+- Если путь не найден — сборка **не падает**, выводится предупреждение.
+
+### Переменные окружения
+Достаточно задать одну:
+
+- `ROR2_PLUGINS_PATH` — папка `BepInEx\plugins` (или `...\plugins`) в которую надо копировать мод.
+  - Пример (игра): `C:\Program Files (x86)\Steam\steamapps\common\Risk of Rain 2\BepInEx\plugins`
+  - Пример (Thunderstore/r2modman профиль): укажите `...\profiles\<profile>\BepInEx\plugins`
+- `ROR2_GAME_PATH` / `ROR2_DIR` / `ROR2_PATH` — корневая папка игры, например: `C:\Program Files (x86)\Steam\steamapps\common\Risk of Rain 2`

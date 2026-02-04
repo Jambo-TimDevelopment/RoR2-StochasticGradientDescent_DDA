@@ -1,4 +1,4 @@
-﻿using BepInEx.Configuration;
+using BepInEx.Configuration;
 
 namespace GeneticsArtifact
 {
@@ -11,6 +11,11 @@ namespace GeneticsArtifact
         public static ConfigEntry<bool> maintainIfDisabled, enableGeneLimitOverrides;
 
         public static ConfigEntry<string> geneLimitOverrides;
+
+        // SGD / sensors normalization parameters
+        public static ConfigEntry<float> sgdNormTargetTimeToDieSeconds;
+        public static ConfigEntry<float> sgdNormTargetTtkSeconds;
+        public static ConfigEntry<float> sgdNormHitRateScalePerSecond;
 
         public static void Init(ConfigFile configFile)
         {
@@ -26,6 +31,23 @@ namespace GeneticsArtifact
 
             enableGeneLimitOverrides = configFile.Bind<bool>(new ConfigDefinition("Mutation Override Variables", "Enable Mutation Overrides"), false, new ConfigDescription("Should the mutation overrides be applied, use with caution", new AcceptableValueList<bool>(true, false)));
             geneLimitOverrides = configFile.Bind<string>(new ConfigDefinition("Mutation Override Variables", "Gene Limit Overrides"), "MoveSpeed,0.5,2|InvalidName,0.8,NaN", new ConfigDescription("Format is as follows: GeneName1,Floor1,Cap1|GeneName2,Floor2,Cap2 where GeneName is in (MaxHealth,MoveSpeed,AttackSpeed,AttackDamage) and Floor and Cap are parseable numerics"));
+
+            // --- SGD / sensors normalization ---
+            // These targets are used to compress sensor values into stable [0..1] signals via Norm01(x)=1-exp(-x).
+            sgdNormTargetTimeToDieSeconds = configFile.Bind<float>(
+                new ConfigDefinition("SGD Sensor Normalization", "Target Time To Die (seconds)"),
+                10f,
+                new ConfigDescription("Target survival horizon used for normalizing incoming DPS against V_p(defense). Higher => less sensitive.", new AcceptableValueRange<float>(1f, 60f)));
+
+            sgdNormTargetTtkSeconds = configFile.Bind<float>(
+                new ConfigDefinition("SGD Sensor Normalization", "Target Time To Kill (seconds)"),
+                8f,
+                new ConfigDescription("Target TTK used for normalizing AvgTTK. Higher => less sensitive.", new AcceptableValueRange<float>(1f, 60f)));
+
+            sgdNormHitRateScalePerSecond = configFile.Bind<float>(
+                new ConfigDefinition("SGD Sensor Normalization", "Hit Rate Scale (per second)"),
+                1.5f,
+                new ConfigDescription("Scale for normalizing hit rate (hits/sec) into [0..1]. Higher => less sensitive.", new AcceptableValueRange<float>(0.1f, 10f)));
         }
     }
 

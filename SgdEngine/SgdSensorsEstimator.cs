@@ -2,6 +2,7 @@ using RoR2;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using GeneticsArtifact;
 
 namespace GeneticsArtifact.SgdEngine
 {
@@ -17,15 +18,7 @@ namespace GeneticsArtifact.SgdEngine
         // Threshold for low-health uptime sensor.
         public const float DefaultLowHealthThreshold = 0.30f;
 
-        // Normalization targets/scales (tuned for stability, not for perfect accuracy).
-        // Incoming damage is normalized relative to player's V_p.defense as "damage over target TTD".
-        public const float TargetTimeToDieSeconds = 10f;
-
-        // AvgTTK is normalized relative to a target time-to-kill.
-        public const float TargetTtkSeconds = 8f;
-
-        // Hit-rate scale for the 0..1 compression.
-        public const float HitRateScalePerSecond = 1.5f;
+        // Normalization targets/scales are configured via BepInEx ConfigManager.
 
         private readonly float _tauSeconds;
         private readonly float _windowSeconds;
@@ -165,11 +158,15 @@ namespace GeneticsArtifact.SgdEngine
 
             // Normalize into [0,1) with exponential compression:
             // norm01 = 1 - exp(-x), where x is a non-negative scaled ratio.
-            float incomingNorm = Normalize01(incomingDps * TargetTimeToDieSeconds / defenseBaselineRaw);
+            float targetTtd = GetConfigOrDefault(ConfigManager.sgdNormTargetTimeToDieSeconds, fallback: 10f);
+            float targetTtk = GetConfigOrDefault(ConfigManager.sgdNormTargetTtkSeconds, fallback: 8f);
+            float hitRateScale = GetConfigOrDefault(ConfigManager.sgdNormHitRateScalePerSecond, fallback: 1.5f);
+
+            float incomingNorm = Normalize01(incomingDps * targetTtd / defenseBaselineRaw);
             float outgoingNorm = Normalize01(outgoingDps / offenseBaselineRaw);
-            float hitRateNorm = Normalize01(hitRate / HitRateScalePerSecond);
+            float hitRateNorm = Normalize01(hitRate / Mathf.Max(0.001f, hitRateScale));
             float deathsNorm = Normalize01(deathsPerWindow);
-            float ttkNorm = Normalize01(avgTtkSeconds / TargetTtkSeconds);
+            float ttkNorm = Normalize01(avgTtkSeconds / Mathf.Max(0.001f, targetTtk));
 
             return new SgdSensorsSample(
                 incomingDamageRate: incomingDps,
@@ -273,6 +270,14 @@ namespace GeneticsArtifact.SgdEngine
             float y = 1f - Mathf.Exp(-x);
             if (float.IsNaN(y) || float.IsInfinity(y)) return 0f;
             return Mathf.Clamp01(y);
+        }
+
+        private static float GetConfigOrDefault(BepInEx.Configuration.ConfigEntry<float> entry, float fallback)
+        {
+            if (entry == null) return fallback;
+            float value = entry.Value;
+            if (float.IsNaN(value) || float.IsInfinity(value) || value <= 0f) return fallback;
+            return value;
         }
     }
 }
