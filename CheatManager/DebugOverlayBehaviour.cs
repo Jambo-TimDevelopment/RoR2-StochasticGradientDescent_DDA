@@ -93,7 +93,7 @@ namespace GeneticsArtifact.CheatManager
             if (text == null) return;
 
             // Smaller font + higher contrast for dense debug output.
-            text.fontSize = 11;
+            text.fontSize = 9;
             text.color = new Color(0.85f, 1.00f, 0.85f, 1f);
             text.alignment = TextAnchor.UpperLeft;
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -137,7 +137,7 @@ namespace GeneticsArtifact.CheatManager
                     $"HP (MaxHealth): {SgdActuatorsRuntimeState.MaxHealthMultiplier:F2}\n" +
                     $"MS (MoveSpeed): {SgdActuatorsRuntimeState.MoveSpeedMultiplier:F2}\n" +
                     $"AS (AttackSpeed): {SgdActuatorsRuntimeState.AttackSpeedMultiplier:F2}\n" +
-                    $"DMG (AttackDamage): {SgdActuatorsRuntimeState.AttackDamageMultiplier:F2}\n";
+                    $"DMG (AttackDamage): {SgdActuatorsRuntimeState.AttackDamageMultiplier:F2}\n\n";
 
                 string decisionText =
                     "Decision (SGD):\n" +
@@ -148,25 +148,25 @@ namespace GeneticsArtifact.CheatManager
                     $"  HP: {(SgdDecisionRuntimeState.IsMaxHealthAdaptationEnabled ? "ENABLED" : "DISABLED")}\n" +
                     $"  MS: {(SgdDecisionRuntimeState.IsMoveSpeedAdaptationEnabled ? "ENABLED" : "DISABLED")}\n" +
                     $"  AS: {(SgdDecisionRuntimeState.IsAttackSpeedAdaptationEnabled ? "ENABLED" : "DISABLED")}\n" +
-                    $"  DMG: {(SgdDecisionRuntimeState.IsAttackDamageAdaptationEnabled ? "ENABLED" : "DISABLED")}\n" +
-                    $"Steps done: total={SgdDecisionRuntimeState.TotalStepsDone}, HP={SgdDecisionRuntimeState.MaxHealthStepsDone}, MS={SgdDecisionRuntimeState.MoveSpeedStepsDone}, AS={SgdDecisionRuntimeState.AttackSpeedStepsDone}, DMG={SgdDecisionRuntimeState.AttackDamageStepsDone}\n" +
+                    $"  DMG: {(SgdDecisionRuntimeState.IsAttackDamageAdaptationEnabled ? "ENABLED" : "DISABLED")}\n\n" +
+                    $"Steps done: total={SgdDecisionRuntimeState.TotalStepsDone}, HP={SgdDecisionRuntimeState.MaxHealthStepsDone}, MS={SgdDecisionRuntimeState.MoveSpeedStepsDone}, AS={SgdDecisionRuntimeState.AttackSpeedStepsDone}, DMG={SgdDecisionRuntimeState.AttackDamageStepsDone}\n\n" +
                     "Axis telemetry (last step):\n" +
                     $"HP (MaxHealth):\n" +
                     $"  Multiplier: {SgdDecisionRuntimeState.MaxHealthMultiplierLast:F2}\n" +
                     $"  Skill: {SgdDecisionRuntimeState.MaxHealthSkill01Last:F2}, Challenge: {SgdDecisionRuntimeState.MaxHealthChallenge01Last:F2}, Error: {SgdDecisionRuntimeState.MaxHealthErrorLast:F2}\n" +
-                    $"  Gradient: {SgdDecisionRuntimeState.MaxHealthGradientLast:F3}, Δθ: {SgdDecisionRuntimeState.MaxHealthDeltaThetaLast:F4}\n" +
+                    $"  Gradient: {SgdDecisionRuntimeState.MaxHealthGradientLast:F3}, Δθ: {SgdDecisionRuntimeState.MaxHealthDeltaThetaLast:F4}\n\n" +
                     $"MS (MoveSpeed):\n" +
                     $"  Multiplier: {SgdDecisionRuntimeState.MoveSpeedMultiplierLast:F2}\n" +
                     $"  Skill: {SgdDecisionRuntimeState.MoveSpeedSkill01Last:F2}, Challenge: {SgdDecisionRuntimeState.MoveSpeedChallenge01Last:F2}, Error: {SgdDecisionRuntimeState.MoveSpeedErrorLast:F2}\n" +
-                    $"  Gradient: {SgdDecisionRuntimeState.MoveSpeedGradientLast:F3}, Δθ: {SgdDecisionRuntimeState.MoveSpeedDeltaThetaLast:F4}\n" +
+                    $"  Gradient: {SgdDecisionRuntimeState.MoveSpeedGradientLast:F3}, Δθ: {SgdDecisionRuntimeState.MoveSpeedDeltaThetaLast:F4}\n\n" +
                     $"AS (AttackSpeed):\n" +
                     $"  Multiplier: {SgdDecisionRuntimeState.AttackSpeedMultiplierLast:F2}\n" +
                     $"  Skill: {SgdDecisionRuntimeState.AttackSpeedSkill01Last:F2}, Challenge: {SgdDecisionRuntimeState.AttackSpeedChallenge01Last:F2}, Error: {SgdDecisionRuntimeState.AttackSpeedErrorLast:F2}\n" +
-                    $"  Gradient: {SgdDecisionRuntimeState.AttackSpeedGradientLast:F3}, Δθ: {SgdDecisionRuntimeState.AttackSpeedDeltaThetaLast:F4}\n" +
+                    $"  Gradient: {SgdDecisionRuntimeState.AttackSpeedGradientLast:F3}, Δθ: {SgdDecisionRuntimeState.AttackSpeedDeltaThetaLast:F4}\n\n" +
                     $"DMG (AttackDamage):\n" +
                     $"  Multiplier: {SgdDecisionRuntimeState.AttackDamageMultiplierLast:F2}\n" +
                     $"  Skill: {SgdDecisionRuntimeState.AttackDamageSkill01Last:F2}, Challenge: {SgdDecisionRuntimeState.AttackDamageChallenge01Last:F2}, Error: {SgdDecisionRuntimeState.AttackDamageErrorLast:F2}\n" +
-                    $"  Gradient: {SgdDecisionRuntimeState.AttackDamageGradientLast:F3}, Δθ: {SgdDecisionRuntimeState.AttackDamageDeltaThetaLast:F4}\n";
+                    $"  Gradient: {SgdDecisionRuntimeState.AttackDamageGradientLast:F3}, Δθ: {SgdDecisionRuntimeState.AttackDamageDeltaThetaLast:F4}\n\n";
 
                 string sensorsText;
                 if (SgdSensorsRuntimeState.HasSample)
@@ -180,7 +180,7 @@ namespace GeneticsArtifact.CheatManager
                         $"CombatUptime: {s.CombatUptime:P0}\n" +
                         $"LowHPUptime: {s.LowHealthUptime:P0}\n" +
                         $"Deaths/W: {s.DeathsPerWindow:F0} (n={s.DeathsPerWindowNorm01:F2})\n" +
-                        $"AvgTTK: {s.AvgTtkSeconds:F2}s (n={s.AvgTtkSecondsNorm01:F2})\n";
+                        $"AvgTTK: {s.AvgTtkSeconds:F2}s (n={s.AvgTtkSecondsNorm01:F2})\n\n";
                 }
                 else
                 {
