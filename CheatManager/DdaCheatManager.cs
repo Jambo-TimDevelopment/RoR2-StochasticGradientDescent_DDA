@@ -117,10 +117,14 @@ namespace GeneticsArtifact.CheatManager
             Debug.Log($"[DDA] SGD step time set to: {SgdDecisionRuntimeState.StepSeconds:F1}s (combat time only)");
         }
 
-        [ConCommand(commandName = "dda_sgd_axis_as", helpText = "Toggle SGD adaptation axis: enemy AttackSpeed. Usage: dda_sgd_axis_as [0|1]")]
-        private static void OnSgdAxisAttackSpeedCommand(ConCommandArgs args)
+        private static void HandleSgdAxisToggleCommand(
+            ConCommandArgs args,
+            string commandName,
+            string axisDisplayName,
+            Func<bool> getValue,
+            Action<bool> setValue)
         {
-            bool enabled = SgdDecisionRuntimeState.IsAttackSpeedAdaptationEnabled;
+            bool enabled = getValue();
 
             if (args.Count > 0)
             {
@@ -130,7 +134,7 @@ namespace GeneticsArtifact.CheatManager
                 }
                 else
                 {
-                    Debug.Log("[DDA] Usage: dda_sgd_axis_as [0|1]. Example: dda_sgd_axis_as 0");
+                    Debug.Log($"[DDA] Usage: {commandName} [0|1]. Example: {commandName} 0");
                     return;
                 }
             }
@@ -141,9 +145,53 @@ namespace GeneticsArtifact.CheatManager
 
             // Convenience: axis configuration implies we want SGD active.
             DdaAlgorithmState.ActiveAlgorithm = DdaAlgorithmType.Sgd;
-            SgdDecisionRuntimeState.SetAttackSpeedAdaptationEnabled(enabled);
+            setValue(enabled);
 
-            Debug.Log($"[DDA] SGD axis AttackSpeed adaptation: {(enabled ? "ENABLED" : "DISABLED")}");
+            Debug.Log($"[DDA] SGD axis {axisDisplayName} adaptation: {(enabled ? "ENABLED" : "DISABLED")}");
+        }
+
+        [ConCommand(commandName = "dda_sgd_axis_hp", helpText = "Toggle SGD adaptation axis: enemy MaxHealth (HP). Usage: dda_sgd_axis_hp [0|1]")]
+        private static void OnSgdAxisMaxHealthCommand(ConCommandArgs args)
+        {
+            HandleSgdAxisToggleCommand(
+                args,
+                commandName: "dda_sgd_axis_hp",
+                axisDisplayName: "MaxHealth (HP)",
+                getValue: () => SgdDecisionRuntimeState.IsMaxHealthAdaptationEnabled,
+                setValue: SgdDecisionRuntimeState.SetMaxHealthAdaptationEnabled);
+        }
+
+        [ConCommand(commandName = "dda_sgd_axis_ms", helpText = "Toggle SGD adaptation axis: enemy MoveSpeed. Usage: dda_sgd_axis_ms [0|1]")]
+        private static void OnSgdAxisMoveSpeedCommand(ConCommandArgs args)
+        {
+            HandleSgdAxisToggleCommand(
+                args,
+                commandName: "dda_sgd_axis_ms",
+                axisDisplayName: "MoveSpeed (MS)",
+                getValue: () => SgdDecisionRuntimeState.IsMoveSpeedAdaptationEnabled,
+                setValue: SgdDecisionRuntimeState.SetMoveSpeedAdaptationEnabled);
+        }
+
+        [ConCommand(commandName = "dda_sgd_axis_as", helpText = "Toggle SGD adaptation axis: enemy AttackSpeed. Usage: dda_sgd_axis_as [0|1]")]
+        private static void OnSgdAxisAttackSpeedCommand(ConCommandArgs args)
+        {
+            HandleSgdAxisToggleCommand(
+                args,
+                commandName: "dda_sgd_axis_as",
+                axisDisplayName: "AttackSpeed (AS)",
+                getValue: () => SgdDecisionRuntimeState.IsAttackSpeedAdaptationEnabled,
+                setValue: SgdDecisionRuntimeState.SetAttackSpeedAdaptationEnabled);
+        }
+
+        [ConCommand(commandName = "dda_sgd_axis_dmg", helpText = "Toggle SGD adaptation axis: enemy AttackDamage (DMG). Usage: dda_sgd_axis_dmg [0|1]")]
+        private static void OnSgdAxisAttackDamageCommand(ConCommandArgs args)
+        {
+            HandleSgdAxisToggleCommand(
+                args,
+                commandName: "dda_sgd_axis_dmg",
+                axisDisplayName: "AttackDamage (DMG)",
+                getValue: () => SgdDecisionRuntimeState.IsAttackDamageAdaptationEnabled,
+                setValue: SgdDecisionRuntimeState.SetAttackDamageAdaptationEnabled);
         }
 
         [ConCommand(commandName = "dda_actuator_hp", helpText = "Set SGD actuator: monster MaxHealth multiplier. Applies to existing monsters on level and future spawns. Usage: dda_actuator_hp <multiplier>")]

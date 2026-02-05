@@ -52,7 +52,11 @@ namespace GeneticsArtifact.CheatManager
             {
                 // Be defensive: if the overlay was created by an older version, ensure it stays click-through.
                 MakeOverlayClickThrough(_overlayRoot);
-                if (_textComponent != null) _textComponent.raycastTarget = false;
+                if (_textComponent != null)
+                {
+                    ApplyTextStyle(_textComponent);
+                    _textComponent.raycastTarget = false;
+                }
                 return;
             }
 
@@ -71,8 +75,7 @@ namespace GeneticsArtifact.CheatManager
 
             _textComponent = textObj.AddComponent<Text>();
             _textComponent.font = GetFontForOverlay();
-            _textComponent.fontSize = 14;
-            _textComponent.color = Color.white;
+            ApplyTextStyle(_textComponent);
             _textComponent.raycastTarget = false;
 
             var rectTransform = _textComponent.rectTransform;
@@ -83,6 +86,21 @@ namespace GeneticsArtifact.CheatManager
             rectTransform.anchoredPosition = Vector2.zero;
 
             _instance = _overlayRoot.AddComponent<DebugOverlayBehaviour>();
+        }
+
+        private static void ApplyTextStyle(Text text)
+        {
+            if (text == null) return;
+
+            // Smaller font + higher contrast for dense debug output.
+            text.fontSize = 11;
+            text.color = new Color(0.85f, 1.00f, 0.85f, 1f);
+
+            // Improve readability on bright backgrounds.
+            var outline = text.GetComponent<Outline>() ?? text.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color(0f, 0f, 0f, 0.75f);
+            outline.effectDistance = new Vector2(1f, -1f);
+            outline.useGraphicAlpha = true;
         }
 
         private static void MakeOverlayClickThrough(GameObject overlayRoot)
@@ -111,65 +129,87 @@ namespace GeneticsArtifact.CheatManager
             {
                 _updateTimer = 0f;
 
-                string actuatorsText =
-                    "Actuators:\n" +
-                    $"HP (MaxHealth): {SgdActuatorsRuntimeState.MaxHealthMultiplier:F2}\n" +
-                    $"MS (MoveSpeed): {SgdActuatorsRuntimeState.MoveSpeedMultiplier:F2}\n" +
-                    $"AS (AttackSpeed): {SgdActuatorsRuntimeState.AttackSpeedMultiplier:F2}\n" +
-                    $"DMG (AttackDamage): {SgdActuatorsRuntimeState.AttackDamageMultiplier:F2}\n";
+                string headerLine = $"[DDA Debug] t={Time.time:F1}s alg={DdaAlgorithmState.ActiveAlgorithm}";
+                string bodyLine = $"Body: {SgdRuntimeState.VirtualPowerBodyName}";
 
-                string decisionText =
-                    "Decision (SGD):\n" +
-                    $"Step: {SgdDecisionRuntimeState.StepSeconds:F1}s, combatTimer: {SgdDecisionRuntimeState.CombatSecondsSinceLastStep:F1}s (next in {SgdDecisionRuntimeState.CombatSecondsUntilNextStep:F1}s)\n" +
-                    $"AS axis: {(SgdDecisionRuntimeState.IsAttackSpeedAdaptationEnabled ? "ENABLED" : "DISABLED")}, steps: {SgdDecisionRuntimeState.TotalStepsDone}\n" +
-                    $"AS.skill: {SgdDecisionRuntimeState.AttackSpeedSkill01Last:F2}, challenge: {SgdDecisionRuntimeState.AttackSpeedChallenge01Last:F2}, error: {SgdDecisionRuntimeState.AttackSpeedErrorLast:F2}\n" +
-                    $"AS.mult(last): {SgdDecisionRuntimeState.AttackSpeedMultiplierLast:F2}, grad: {SgdDecisionRuntimeState.AttackSpeedGradientLast:F3}, dθ: {SgdDecisionRuntimeState.AttackSpeedDeltaThetaLast:F4}\n" +
-                    $"AS.appliedMonsters: {SgdDecisionRuntimeState.AttackSpeedAppliedMonstersLast}\n";
-
+                string vpLine = "V_p: N/A";
                 if (SgdRuntimeState.HasVirtualPower)
                 {
                     var vp = SgdRuntimeState.VirtualPower;
-
-                    string sensorsText;
-                    if (SgdSensorsRuntimeState.HasSample)
-                    {
-                        var s = SgdSensorsRuntimeState.Sample;
-                        sensorsText =
-                            $"Sensors:\n" +
-                            $"IncomingDPS: {s.IncomingDamageRate:F1} (n={s.IncomingDamageNorm01:F2})\n" +
-                            $"OutgoingDPS: {s.OutgoingDamageRate:F1} (n={s.OutgoingDamageNorm01:F2})\n" +
-                            $"HitRate: {s.HitRateOnPlayer:F2}/s (n={s.HitRateOnPlayerNorm01:F2})\n" +
-                            $"CombatUptime: {s.CombatUptime:P0}\n" +
-                            $"LowHPUptime: {s.LowHealthUptime:P0}\n" +
-                            $"Deaths/W: {s.DeathsPerWindow:F0} (n={s.DeathsPerWindowNorm01:F2})\n" +
-                            $"AvgTTK: {s.AvgTtkSeconds:F2}s (n={s.AvgTtkSecondsNorm01:F2})\n";
-                    }
-                    else
-                    {
-                        sensorsText = "Sensors: N/A\n";
-                    }
-
-                    _textComponent.text =
-                        $"[DDA Debug]\n" +
-                        $"Time: {Time.time:F1}s\n" +
-                        $"Body: {SgdRuntimeState.VirtualPowerBodyName}\n" +
-                        $"V_p.offense: {vp.Offense:F3}\n" +
-                        $"V_p.defense: {vp.Defense:F3}\n" +
-                        $"V_p.mobility: {vp.Mobility:F3}\n" +
-                        $"V_p.total: {vp.Total:F3}\n\n" +
-                        actuatorsText + "\n" +
-                        decisionText + "\n" +
-                        sensorsText;
+                    vpLine = $"V_p: total={vp.Total:F3} (o={vp.Offense:F3}, d={vp.Defense:F3}, m={vp.Mobility:F3})";
                 }
-                else
+
+                string actuatorsLine =
+                    $"Actuators: HP={SgdActuatorsRuntimeState.MaxHealthMultiplier:F2} " +
+                    $"MS={SgdActuatorsRuntimeState.MoveSpeedMultiplier:F2} " +
+                    $"AS={SgdActuatorsRuntimeState.AttackSpeedMultiplier:F2} " +
+                    $"DMG={SgdActuatorsRuntimeState.AttackDamageMultiplier:F2}";
+
+                string decisionMetaLine =
+                    $"SGD: step={SgdDecisionRuntimeState.StepSeconds:F1}s " +
+                    $"combat={SgdDecisionRuntimeState.CombatSecondsSinceLastStep:F1}/{SgdDecisionRuntimeState.StepSeconds:F1} " +
+                    $"next={SgdDecisionRuntimeState.CombatSecondsUntilNextStep:F1}s " +
+                    $"steps={SgdDecisionRuntimeState.TotalStepsDone} " +
+                    $"applied={SgdDecisionRuntimeState.AppliedMonstersLast}";
+
+                string axesLine =
+                    $"Axes: HP={(SgdDecisionRuntimeState.IsMaxHealthAdaptationEnabled ? "on" : "off")} " +
+                    $"MS={(SgdDecisionRuntimeState.IsMoveSpeedAdaptationEnabled ? "on" : "off")} " +
+                    $"AS={(SgdDecisionRuntimeState.IsAttackSpeedAdaptationEnabled ? "on" : "off")} " +
+                    $"DMG={(SgdDecisionRuntimeState.IsAttackDamageAdaptationEnabled ? "on" : "off")}";
+
+                string hpLine =
+                    $"HP:  mult={SgdDecisionRuntimeState.MaxHealthMultiplierLast:F2} " +
+                    $"s={SgdDecisionRuntimeState.MaxHealthSkill01Last:F2} " +
+                    $"c={SgdDecisionRuntimeState.MaxHealthChallenge01Last:F2} " +
+                    $"e={SgdDecisionRuntimeState.MaxHealthErrorLast:F2} " +
+                    $"dθ={SgdDecisionRuntimeState.MaxHealthDeltaThetaLast:F4}";
+
+                string msLine =
+                    $"MS:  mult={SgdDecisionRuntimeState.MoveSpeedMultiplierLast:F2} " +
+                    $"s={SgdDecisionRuntimeState.MoveSpeedSkill01Last:F2} " +
+                    $"c={SgdDecisionRuntimeState.MoveSpeedChallenge01Last:F2} " +
+                    $"e={SgdDecisionRuntimeState.MoveSpeedErrorLast:F2} " +
+                    $"dθ={SgdDecisionRuntimeState.MoveSpeedDeltaThetaLast:F4}";
+
+                string asLine =
+                    $"AS:  mult={SgdDecisionRuntimeState.AttackSpeedMultiplierLast:F2} " +
+                    $"s={SgdDecisionRuntimeState.AttackSpeedSkill01Last:F2} " +
+                    $"c={SgdDecisionRuntimeState.AttackSpeedChallenge01Last:F2} " +
+                    $"e={SgdDecisionRuntimeState.AttackSpeedErrorLast:F2} " +
+                    $"dθ={SgdDecisionRuntimeState.AttackSpeedDeltaThetaLast:F4}";
+
+                string dmgLine =
+                    $"DMG: mult={SgdDecisionRuntimeState.AttackDamageMultiplierLast:F2} " +
+                    $"s={SgdDecisionRuntimeState.AttackDamageSkill01Last:F2} " +
+                    $"c={SgdDecisionRuntimeState.AttackDamageChallenge01Last:F2} " +
+                    $"e={SgdDecisionRuntimeState.AttackDamageErrorLast:F2} " +
+                    $"dθ={SgdDecisionRuntimeState.AttackDamageDeltaThetaLast:F4}";
+
+                string sensorsLine = "Sensors: N/A";
+                if (SgdSensorsRuntimeState.HasSample)
                 {
-                    _textComponent.text =
-                        $"[DDA Debug]\n" +
-                        $"Time: {Time.time:F1}s\n" +
-                        "V_p: N/A (enable SGD or start a run)\n\n" +
-                        actuatorsText + "\n" +
-                        decisionText;
+                    var s = SgdSensorsRuntimeState.Sample;
+                    sensorsLine =
+                        $"Sensors: in={s.IncomingDamageRate:F1}(n={s.IncomingDamageNorm01:F2}) " +
+                        $"out={s.OutgoingDamageRate:F1}(n={s.OutgoingDamageNorm01:F2}) " +
+                        $"hit={s.HitRateOnPlayer:F2}/s(n={s.HitRateOnPlayerNorm01:F2}) " +
+                        $"low={s.LowHealthUptime:P0} deaths={s.DeathsPerWindow:F0}(n={s.DeathsPerWindowNorm01:F2}) " +
+                        $"ttk={s.AvgTtkSeconds:F1}s(n={s.AvgTtkSecondsNorm01:F2})";
                 }
+
+                _textComponent.text =
+                    headerLine + "\n" +
+                    bodyLine + "\n" +
+                    vpLine + "\n" +
+                    actuatorsLine + "\n" +
+                    decisionMetaLine + "\n" +
+                    axesLine + "\n" +
+                    hpLine + "\n" +
+                    msLine + "\n" +
+                    asLine + "\n" +
+                    dmgLine + "\n" +
+                    sensorsLine;
             }
         }
     }
