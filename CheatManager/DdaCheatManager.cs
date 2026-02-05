@@ -90,45 +90,45 @@ namespace GeneticsArtifact.CheatManager
             Debug.Log("[DDA] dda_param: Not yet implemented. Use config file for now.");
         }
 
-        [ConCommand(commandName = "dda_sgd_hp", helpText = "Set SGD actuator: monster MaxHealth multiplier. Applies to existing monsters on level and future spawns. Usage: dda_sgd_hp <multiplier>")]
+        [ConCommand(commandName = "dda_actuator_hp", helpText = "Set SGD actuator: monster MaxHealth multiplier. Applies to existing monsters on level and future spawns. Usage: dda_actuator_hp <multiplier>")]
         private static void OnSgdHpCommand(ConCommandArgs args)
         {
             HandleSgdActuatorFloatCommand(
                 args,
-                commandName: "dda_sgd_hp",
+                commandName: "dda_actuator_hp",
                 statDisplayName: "HP (MaxHealth)",
                 getValue: () => SgdActuatorsRuntimeState.MaxHealthMultiplier,
                 setValue: SgdActuatorsRuntimeState.SetMaxHealthMultiplier);
         }
 
-        [ConCommand(commandName = "dda_sgd_ms", helpText = "Set SGD actuator: monster MoveSpeed multiplier. Applies to existing monsters on level and future spawns. Usage: dda_sgd_ms <multiplier>")]
+        [ConCommand(commandName = "dda_actuator_ms", helpText = "Set SGD actuator: monster MoveSpeed multiplier. Applies to existing monsters on level and future spawns. Usage: dda_actuator_ms <multiplier>")]
         private static void OnSgdMoveSpeedCommand(ConCommandArgs args)
         {
             HandleSgdActuatorFloatCommand(
                 args,
-                commandName: "dda_sgd_ms",
+                commandName: "dda_actuator_ms",
                 statDisplayName: "MS (MoveSpeed)",
                 getValue: () => SgdActuatorsRuntimeState.MoveSpeedMultiplier,
                 setValue: SgdActuatorsRuntimeState.SetMoveSpeedMultiplier);
         }
 
-        [ConCommand(commandName = "dda_sgd_as", helpText = "Set SGD actuator: monster AttackSpeed multiplier. Applies to existing monsters on level and future spawns. Usage: dda_sgd_as <multiplier>")]
+        [ConCommand(commandName = "dda_actuator_as", helpText = "Set SGD actuator: monster AttackSpeed multiplier. Applies to existing monsters on level and future spawns. Usage: dda_actuator_as <multiplier>")]
         private static void OnSgdAttackSpeedCommand(ConCommandArgs args)
         {
             HandleSgdActuatorFloatCommand(
                 args,
-                commandName: "dda_sgd_as",
+                commandName: "dda_actuator_as",
                 statDisplayName: "AS (AttackSpeed)",
                 getValue: () => SgdActuatorsRuntimeState.AttackSpeedMultiplier,
                 setValue: SgdActuatorsRuntimeState.SetAttackSpeedMultiplier);
         }
 
-        [ConCommand(commandName = "dda_sgd_dmg", helpText = "Set SGD actuator: monster AttackDamage multiplier. Applies to existing monsters on level and future spawns. Usage: dda_sgd_dmg <multiplier>")]
+        [ConCommand(commandName = "dda_actuator_dmg", helpText = "Set SGD actuator: monster AttackDamage multiplier. Applies to existing monsters on level and future spawns. Usage: dda_actuator_dmg <multiplier>")]
         private static void OnSgdAttackDamageCommand(ConCommandArgs args)
         {
             HandleSgdActuatorFloatCommand(
                 args,
-                commandName: "dda_sgd_dmg",
+                commandName: "dda_actuator_dmg",
                 statDisplayName: "DMG (AttackDamage)",
                 getValue: () => SgdActuatorsRuntimeState.AttackDamageMultiplier,
                 setValue: SgdActuatorsRuntimeState.SetAttackDamageMultiplier);
@@ -180,7 +180,7 @@ namespace GeneticsArtifact.CheatManager
             Debug.Log($"[DDA] SGD actuator set: {statDisplayName} multiplier = {clamped:F2}. Applied to {applied} existing monsters; will apply to future spawns. Tip: run 'dda_genetics 0' to avoid genetic engine interference.");
         }
 
-        [ConCommand(commandName = "dda_monster_hp", helpText = "Toggle HP numbers above monsters (client-side). Usage: dda_monster_hp [0|1]")]
+        [ConCommand(commandName = "dda_show_monster_hp", helpText = "Toggle HP numbers above monsters (client-side). Usage: dda_show_monster_hp [0|1]")]
         private static void OnMonsterHpOverlay(ConCommandArgs args)
         {
             if (args.Count > 0)
@@ -191,7 +191,7 @@ namespace GeneticsArtifact.CheatManager
                 }
                 else
                 {
-                    Debug.Log("[DDA] Usage: dda_monster_hp [0|1]");
+                    Debug.Log("[DDA] Usage: dda_show_monster_hp [0|1]");
                     return;
                 }
             }
