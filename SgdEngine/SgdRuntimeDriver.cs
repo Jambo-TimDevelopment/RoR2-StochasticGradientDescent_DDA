@@ -1,4 +1,5 @@
 using GeneticsArtifact.CheatManager;
+using GeneticsArtifact.SgdEngine.Actuators;
 using GeneticsArtifact.SgdEngine.Decision;
 using RoR2;
 using UnityEngine;
@@ -27,6 +28,12 @@ namespace GeneticsArtifact.SgdEngine
         private static void Run_Start(On.RoR2.Run.orig_Start orig, Run self)
         {
             orig(self);
+
+            // New run started: reset SGD axes and actuators to defaults (not per-stage).
+            // This keeps debugging deterministic and matches the expected "new run resets" behavior.
+            SgdDecisionRuntimeState.Reset();
+            SgdActuatorsRuntimeState.Reset();
+            SgdActuatorsApplier.ApplyToAllLivingMonsters();
 
             // Attach only once per Run. We keep it lightweight and gate work in Update().
             if (self != null && self.gameObject != null && self.gameObject.GetComponent<SgdRuntimeDriver>() == null)
@@ -74,7 +81,6 @@ namespace GeneticsArtifact.SgdEngine
             {
                 SgdRuntimeState.Clear();
                 SgdSensorsRuntimeState.Clear();
-                SgdDecisionRuntimeState.Reset();
                 _trackedBody = null;
                 _vpEstimator.Reset();
                 return;
@@ -84,7 +90,6 @@ namespace GeneticsArtifact.SgdEngine
             {
                 _trackedBody = body;
                 _vpEstimator.Reset();
-                SgdDecisionRuntimeState.Reset();
             }
 
             var sample = _vpEstimator.ComputeSmoothed(body, Time.deltaTime);

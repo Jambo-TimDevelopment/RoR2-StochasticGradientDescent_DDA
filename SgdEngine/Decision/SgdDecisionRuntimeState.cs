@@ -21,6 +21,7 @@ namespace GeneticsArtifact.SgdEngine.Decision
         public static int TotalStepsDone { get; private set; }
 
         // --- Axis: AttackSpeed ---
+        public static bool IsAttackSpeedAdaptationEnabled { get; private set; } = true;
         public static bool HasAttackSpeedState { get; private set; }
 
         /// <summary>
@@ -52,6 +53,7 @@ namespace GeneticsArtifact.SgdEngine.Decision
             CombatSecondsSinceLastStep = 0f;
             TotalStepsDone = 0;
 
+            IsAttackSpeedAdaptationEnabled = true;
             HasAttackSpeedState = false;
             AttackSpeedTheta = 0f;
             AttackSpeedVelocity = 0f;
@@ -64,6 +66,16 @@ namespace GeneticsArtifact.SgdEngine.Decision
             AttackSpeedDeltaThetaLast = 0f;
             AttackSpeedMultiplierLast = 1f;
             AttackSpeedAppliedMonstersLast = 0;
+        }
+
+        public static void SetAttackSpeedAdaptationEnabled(bool enabled)
+        {
+            IsAttackSpeedAdaptationEnabled = enabled;
+
+            // When toggling, clear step timer and momentum to avoid an immediate jump
+            // and to make behavior easier to debug.
+            CombatSecondsSinceLastStep = 0f;
+            AttackSpeedVelocity = 0f;
         }
 
         public static void SetStepSeconds(float seconds)

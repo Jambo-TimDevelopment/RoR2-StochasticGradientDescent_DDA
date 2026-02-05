@@ -48,7 +48,13 @@ namespace GeneticsArtifact.CheatManager
 
         private static void EnsureOverlayExists()
         {
-            if (_overlayRoot != null) return;
+            if (_overlayRoot != null)
+            {
+                // Be defensive: if the overlay was created by an older version, ensure it stays click-through.
+                MakeOverlayClickThrough(_overlayRoot);
+                if (_textComponent != null) _textComponent.raycastTarget = false;
+                return;
+            }
 
             _overlayRoot = new GameObject("DdaDebugOverlay");
             DontDestroyOnLoad(_overlayRoot);
@@ -58,13 +64,7 @@ namespace GeneticsArtifact.CheatManager
             canvas.sortingOrder = 1000;
 
             _overlayRoot.AddComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            
-            // IMPORTANT: the debug overlay must never block UI interactions (menus, HUD, etc).
-            // Do not add a GraphicRaycaster; also explicitly disable raycast blocking via CanvasGroup.
-            var canvasGroup = _overlayRoot.AddComponent<CanvasGroup>();
-            canvasGroup.interactable = false;
-            canvasGroup.blocksRaycasts = false;
-            canvasGroup.ignoreParentGroups = true;
+            MakeOverlayClickThrough(_overlayRoot);
 
             var textObj = new GameObject("DebugText");
             textObj.transform.SetParent(_overlayRoot.transform, false);
@@ -83,6 +83,23 @@ namespace GeneticsArtifact.CheatManager
             rectTransform.anchoredPosition = Vector2.zero;
 
             _instance = _overlayRoot.AddComponent<DebugOverlayBehaviour>();
+        }
+
+        private static void MakeOverlayClickThrough(GameObject overlayRoot)
+        {
+            if (overlayRoot == null) return;
+
+            // IMPORTANT: the debug overlay must never block UI interactions (menus, HUD, etc).
+            var raycaster = overlayRoot.GetComponent<GraphicRaycaster>();
+            if (raycaster != null)
+            {
+                raycaster.enabled = false;
+            }
+
+            var canvasGroup = overlayRoot.GetComponent<CanvasGroup>() ?? overlayRoot.AddComponent<CanvasGroup>();
+            canvasGroup.interactable = false;
+            canvasGroup.blocksRaycasts = false;
+            canvasGroup.ignoreParentGroups = true;
         }
 
         private void Update()
@@ -104,7 +121,7 @@ namespace GeneticsArtifact.CheatManager
                 string decisionText =
                     "Decision (SGD):\n" +
                     $"Step: {SgdDecisionRuntimeState.StepSeconds:F1}s, combatTimer: {SgdDecisionRuntimeState.CombatSecondsSinceLastStep:F1}s (next in {SgdDecisionRuntimeState.CombatSecondsUntilNextStep:F1}s)\n" +
-                    $"AS steps: {SgdDecisionRuntimeState.TotalStepsDone}\n" +
+                    $"AS axis: {(SgdDecisionRuntimeState.IsAttackSpeedAdaptationEnabled ? "ENABLED" : "DISABLED")}, steps: {SgdDecisionRuntimeState.TotalStepsDone}\n" +
                     $"AS.skill: {SgdDecisionRuntimeState.AttackSpeedSkill01Last:F2}, challenge: {SgdDecisionRuntimeState.AttackSpeedChallenge01Last:F2}, error: {SgdDecisionRuntimeState.AttackSpeedErrorLast:F2}\n" +
                     $"AS.mult(last): {SgdDecisionRuntimeState.AttackSpeedMultiplierLast:F2}, grad: {SgdDecisionRuntimeState.AttackSpeedGradientLast:F3}, dθ: {SgdDecisionRuntimeState.AttackSpeedDeltaThetaLast:F4}\n" +
                     $"AS.appliedMonsters: {SgdDecisionRuntimeState.AttackSpeedAppliedMonstersLast}\n";

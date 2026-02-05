@@ -29,6 +29,13 @@ namespace GeneticsArtifact.SgdEngine.Decision
             if (playerBody == null) return;
             if (dt <= 0f || float.IsNaN(dt) || float.IsInfinity(dt)) return;
 
+            EnsureAttackSpeedStateSynced();
+
+            if (!SgdDecisionRuntimeState.IsAttackSpeedAdaptationEnabled)
+            {
+                return;
+            }
+
             // Only learn while in combat (easier to reason about signals while debugging).
             if (playerBody.outOfCombat)
             {
@@ -39,8 +46,6 @@ namespace GeneticsArtifact.SgdEngine.Decision
             {
                 return;
             }
-
-            EnsureAttackSpeedStateSynced();
 
             SgdDecisionRuntimeState.AddCombatSeconds(dt);
             int dueSteps = SgdDecisionRuntimeState.ConsumeDueSteps();

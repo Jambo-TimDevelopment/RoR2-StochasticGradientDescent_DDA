@@ -117,6 +117,35 @@ namespace GeneticsArtifact.CheatManager
             Debug.Log($"[DDA] SGD step time set to: {SgdDecisionRuntimeState.StepSeconds:F1}s (combat time only)");
         }
 
+        [ConCommand(commandName = "dda_sgd_axis_as", helpText = "Toggle SGD adaptation axis: enemy AttackSpeed. Usage: dda_sgd_axis_as [0|1]")]
+        private static void OnSgdAxisAttackSpeedCommand(ConCommandArgs args)
+        {
+            bool enabled = SgdDecisionRuntimeState.IsAttackSpeedAdaptationEnabled;
+
+            if (args.Count > 0)
+            {
+                if (int.TryParse(args[0], out int value))
+                {
+                    enabled = value != 0;
+                }
+                else
+                {
+                    Debug.Log("[DDA] Usage: dda_sgd_axis_as [0|1]. Example: dda_sgd_axis_as 0");
+                    return;
+                }
+            }
+            else
+            {
+                enabled = !enabled;
+            }
+
+            // Convenience: axis configuration implies we want SGD active.
+            DdaAlgorithmState.ActiveAlgorithm = DdaAlgorithmType.Sgd;
+            SgdDecisionRuntimeState.SetAttackSpeedAdaptationEnabled(enabled);
+
+            Debug.Log($"[DDA] SGD axis AttackSpeed adaptation: {(enabled ? "ENABLED" : "DISABLED")}");
+        }
+
         [ConCommand(commandName = "dda_actuator_hp", helpText = "Set SGD actuator: monster MaxHealth multiplier. Applies to existing monsters on level and future spawns. Usage: dda_actuator_hp <multiplier>")]
         private static void OnSgdHpCommand(ConCommandArgs args)
         {
