@@ -2,6 +2,7 @@ using R2API.Utils;
 using RoR2;
 using System;
 using System.Globalization;
+using GeneticsArtifact.SgdEngine.Decision;
 using GeneticsArtifact.SgdEngine.Actuators;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -52,7 +53,11 @@ namespace GeneticsArtifact.CheatManager
                 else if (arg == "sgd")
                 {
                     DdaAlgorithmState.ActiveAlgorithm = DdaAlgorithmType.Sgd;
-                    Debug.Log("[DDA] Algorithm set to: SGD (not yet implemented)");
+
+                    // Avoid interference: the genetic engine does not check ActiveAlgorithm and will run if enabled.
+                    DdaAlgorithmState.IsGeneticAlgorithmEnabled = false;
+
+                    Debug.Log("[DDA] Algorithm set to: SGD (genetic engine disabled to avoid interference)");
                 }
                 else
                 {
@@ -88,6 +93,28 @@ namespace GeneticsArtifact.CheatManager
         private static void OnParamCommand(ConCommandArgs args)
         {
             Debug.Log("[DDA] dda_param: Not yet implemented. Use config file for now.");
+        }
+
+        [ConCommand(commandName = "dda_sgd_step_time", helpText = "Set SGD gradient step time (seconds). Counts only combat time. Usage: dda_sgd_step_time [seconds]")]
+        private static void OnSgdStepTimeCommand(ConCommandArgs args)
+        {
+            if (args.Count <= 0)
+            {
+                Debug.Log($"[DDA] SGD step time: {SgdDecisionRuntimeState.StepSeconds:F1}s (combat time only)");
+                return;
+            }
+
+            if (!TryParseFloat(args[0], out float seconds))
+            {
+                Debug.Log("[DDA] Usage: dda_sgd_step_time [seconds]. Example: dda_sgd_step_time 10");
+                return;
+            }
+
+            // Convenience: step configuration implies we want SGD active.
+            DdaAlgorithmState.ActiveAlgorithm = DdaAlgorithmType.Sgd;
+            SgdDecisionRuntimeState.SetStepSeconds(seconds);
+
+            Debug.Log($"[DDA] SGD step time set to: {SgdDecisionRuntimeState.StepSeconds:F1}s (combat time only)");
         }
 
         [ConCommand(commandName = "dda_actuator_hp", helpText = "Set SGD actuator: monster MaxHealth multiplier. Applies to existing monsters on level and future spawns. Usage: dda_actuator_hp <multiplier>")]

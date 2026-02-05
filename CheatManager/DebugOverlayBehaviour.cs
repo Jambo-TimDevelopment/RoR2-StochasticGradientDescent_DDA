@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using GeneticsArtifact.SgdEngine;
+using GeneticsArtifact.SgdEngine.Decision;
 using GeneticsArtifact.SgdEngine.Actuators;
 
 namespace GeneticsArtifact.CheatManager
@@ -57,7 +58,13 @@ namespace GeneticsArtifact.CheatManager
             canvas.sortingOrder = 1000;
 
             _overlayRoot.AddComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            _overlayRoot.AddComponent<GraphicRaycaster>();
+            
+            // IMPORTANT: the debug overlay must never block UI interactions (menus, HUD, etc).
+            // Do not add a GraphicRaycaster; also explicitly disable raycast blocking via CanvasGroup.
+            var canvasGroup = _overlayRoot.AddComponent<CanvasGroup>();
+            canvasGroup.interactable = false;
+            canvasGroup.blocksRaycasts = false;
+            canvasGroup.ignoreParentGroups = true;
 
             var textObj = new GameObject("DebugText");
             textObj.transform.SetParent(_overlayRoot.transform, false);
@@ -66,12 +73,13 @@ namespace GeneticsArtifact.CheatManager
             _textComponent.font = GetFontForOverlay();
             _textComponent.fontSize = 14;
             _textComponent.color = Color.white;
+            _textComponent.raycastTarget = false;
 
             var rectTransform = _textComponent.rectTransform;
             rectTransform.anchorMin = new Vector2(0.02f, 0.98f);
             rectTransform.anchorMax = new Vector2(0.98f, 0.98f);
             rectTransform.pivot = new Vector2(0.5f, 1f);
-            rectTransform.sizeDelta = new Vector2(-40, 320);
+            rectTransform.sizeDelta = new Vector2(-40, 440);
             rectTransform.anchoredPosition = Vector2.zero;
 
             _instance = _overlayRoot.AddComponent<DebugOverlayBehaviour>();
@@ -92,6 +100,14 @@ namespace GeneticsArtifact.CheatManager
                     $"MS (MoveSpeed): {SgdActuatorsRuntimeState.MoveSpeedMultiplier:F2}\n" +
                     $"AS (AttackSpeed): {SgdActuatorsRuntimeState.AttackSpeedMultiplier:F2}\n" +
                     $"DMG (AttackDamage): {SgdActuatorsRuntimeState.AttackDamageMultiplier:F2}\n";
+
+                string decisionText =
+                    "Decision (SGD):\n" +
+                    $"Step: {SgdDecisionRuntimeState.StepSeconds:F1}s, combatTimer: {SgdDecisionRuntimeState.CombatSecondsSinceLastStep:F1}s (next in {SgdDecisionRuntimeState.CombatSecondsUntilNextStep:F1}s)\n" +
+                    $"AS steps: {SgdDecisionRuntimeState.TotalStepsDone}\n" +
+                    $"AS.skill: {SgdDecisionRuntimeState.AttackSpeedSkill01Last:F2}, challenge: {SgdDecisionRuntimeState.AttackSpeedChallenge01Last:F2}, error: {SgdDecisionRuntimeState.AttackSpeedErrorLast:F2}\n" +
+                    $"AS.mult(last): {SgdDecisionRuntimeState.AttackSpeedMultiplierLast:F2}, grad: {SgdDecisionRuntimeState.AttackSpeedGradientLast:F3}, dθ: {SgdDecisionRuntimeState.AttackSpeedDeltaThetaLast:F4}\n" +
+                    $"AS.appliedMonsters: {SgdDecisionRuntimeState.AttackSpeedAppliedMonstersLast}\n";
 
                 if (SgdRuntimeState.HasVirtualPower)
                 {
@@ -125,6 +141,7 @@ namespace GeneticsArtifact.CheatManager
                         $"V_p.mobility: {vp.Mobility:F3}\n" +
                         $"V_p.total: {vp.Total:F3}\n\n" +
                         actuatorsText + "\n" +
+                        decisionText + "\n" +
                         sensorsText;
                 }
                 else
@@ -133,7 +150,8 @@ namespace GeneticsArtifact.CheatManager
                         $"[DDA Debug]\n" +
                         $"Time: {Time.time:F1}s\n" +
                         "V_p: N/A (enable SGD or start a run)\n\n" +
-                        actuatorsText;
+                        actuatorsText + "\n" +
+                        decisionText;
                 }
             }
         }

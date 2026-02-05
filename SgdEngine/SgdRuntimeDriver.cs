@@ -1,6 +1,8 @@
 using GeneticsArtifact.CheatManager;
+using GeneticsArtifact.SgdEngine.Decision;
 using RoR2;
 using UnityEngine;
+using UnityEngine.Networking;
 
 namespace GeneticsArtifact.SgdEngine
 {
@@ -14,6 +16,7 @@ namespace GeneticsArtifact.SgdEngine
 
         private readonly SgdVirtualPowerEstimator _vpEstimator = new SgdVirtualPowerEstimator();
         private CharacterBody _trackedBody;
+        private bool _wasSgdActiveLastFrame;
 
         public static void RegisterHooks()
         {
@@ -42,6 +45,7 @@ namespace GeneticsArtifact.SgdEngine
 
             _instance = this;
             SgdRuntimeState.Clear();
+            SgdDecisionRuntimeState.Reset();
         }
 
         private void OnDestroy()
@@ -51,8 +55,16 @@ namespace GeneticsArtifact.SgdEngine
 
         private void Update()
         {
+            bool isSgdActive = DdaAlgorithmState.ActiveAlgorithm == DdaAlgorithmType.Sgd;
+            if (isSgdActive && !_wasSgdActiveLastFrame)
+            {
+                // Reset on activation to make debugging easier and avoid stale momentum/timers.
+                SgdDecisionRuntimeState.Reset();
+            }
+            _wasSgdActiveLastFrame = isSgdActive;
+
             // Hard gate: do nothing unless SGD is selected or overlay is enabled.
-            if (DdaAlgorithmState.ActiveAlgorithm != DdaAlgorithmType.Sgd && !DdaAlgorithmState.IsDebugOverlayEnabled)
+            if (!isSgdActive && !DdaAlgorithmState.IsDebugOverlayEnabled)
             {
                 return;
             }
@@ -62,6 +74,7 @@ namespace GeneticsArtifact.SgdEngine
             {
                 SgdRuntimeState.Clear();
                 SgdSensorsRuntimeState.Clear();
+                SgdDecisionRuntimeState.Reset();
                 _trackedBody = null;
                 _vpEstimator.Reset();
                 return;
@@ -71,12 +84,18 @@ namespace GeneticsArtifact.SgdEngine
             {
                 _trackedBody = body;
                 _vpEstimator.Reset();
+                SgdDecisionRuntimeState.Reset();
             }
 
             var sample = _vpEstimator.ComputeSmoothed(body, Time.deltaTime);
             SgdRuntimeState.SetVirtualPower(sample, body);
 
             SgdSensorsHooks.Tick(body, Time.deltaTime, sample);
+
+            if (isSgdActive && NetworkServer.active)
+            {
+                SgdDecisionDriver.Tick(body, Time.deltaTime);
+            }
         }
 
         private static CharacterBody FindAnyPlayerBody()

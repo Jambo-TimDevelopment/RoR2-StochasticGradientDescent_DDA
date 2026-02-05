@@ -13,7 +13,7 @@ namespace GeneticsArtifact.CheatManager
         /// <summary>
         /// Currently active difficulty adaptation algorithm.
         /// </summary>
-        public static DdaAlgorithmType ActiveAlgorithm { get; set; } = DdaAlgorithmType.Genetic;
+        public static DdaAlgorithmType ActiveAlgorithm { get; set; } = DdaAlgorithmType.Sgd;
 
         /// <summary>
         /// Whether the debug overlay is visible on screen.
