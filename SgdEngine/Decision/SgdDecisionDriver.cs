@@ -1,4 +1,5 @@
 using GeneticsArtifact.CheatManager;
+using GeneticsArtifact.SgdEngine;
 using GeneticsArtifact.SgdEngine.Actuators;
 using RoR2;
 using UnityEngine;
@@ -85,7 +86,7 @@ namespace GeneticsArtifact.SgdEngine.Decision
 
         private static void EnsureMaxHealthStateSynced()
         {
-            GetGeneLimits(out float floor, out float cap);
+            SgdAxisLimitProvider.GetMaxHealthLimits(out float floor, out float cap);
             float thetaMin = Mathf.Log(floor);
             float thetaMax = Mathf.Log(cap);
 
@@ -110,7 +111,7 @@ namespace GeneticsArtifact.SgdEngine.Decision
 
         private static void EnsureMoveSpeedStateSynced()
         {
-            GetGeneLimits(out float floor, out float cap);
+            SgdAxisLimitProvider.GetMoveSpeedLimits(out float floor, out float cap);
             float thetaMin = Mathf.Log(floor);
             float thetaMax = Mathf.Log(cap);
 
@@ -135,7 +136,7 @@ namespace GeneticsArtifact.SgdEngine.Decision
 
         private static void EnsureAttackSpeedStateSynced()
         {
-            GetGeneLimits(out float floor, out float cap);
+            SgdAxisLimitProvider.GetAttackSpeedLimits(out float floor, out float cap);
             float thetaMin = Mathf.Log(floor);
             float thetaMax = Mathf.Log(cap);
 
@@ -161,7 +162,7 @@ namespace GeneticsArtifact.SgdEngine.Decision
 
         private static void EnsureAttackDamageStateSynced()
         {
-            GetGeneLimits(out float floor, out float cap);
+            SgdAxisLimitProvider.GetAttackDamageLimits(out float floor, out float cap);
             float thetaMin = Mathf.Log(floor);
             float thetaMax = Mathf.Log(cap);
 
@@ -186,30 +187,23 @@ namespace GeneticsArtifact.SgdEngine.Decision
 
         private static void StepAllAxes(in SgdSensorsSample sensors)
         {
-            GetGeneLimits(out float floor, out float cap);
-
-            // Convert current parameter to normalized challenge in [0..1] using log-space.
-            float thetaMin = Mathf.Log(floor);
-            float thetaMax = Mathf.Log(cap);
-            float thetaRange = Mathf.Max(0.0001f, thetaMax - thetaMin);
-
             bool changed = false;
 
             if (SgdDecisionRuntimeState.IsMaxHealthAdaptationEnabled)
             {
-                changed |= StepMaxHealth(sensors, thetaMin, thetaMax, thetaRange);
+                changed |= StepMaxHealth(sensors);
             }
             if (SgdDecisionRuntimeState.IsMoveSpeedAdaptationEnabled)
             {
-                changed |= StepMoveSpeed(sensors, thetaMin, thetaMax, thetaRange);
+                changed |= StepMoveSpeed(sensors);
             }
             if (SgdDecisionRuntimeState.IsAttackSpeedAdaptationEnabled)
             {
-                changed |= StepAttackSpeed(sensors, thetaMin, thetaMax, thetaRange);
+                changed |= StepAttackSpeed(sensors);
             }
             if (SgdDecisionRuntimeState.IsAttackDamageAdaptationEnabled)
             {
-                changed |= StepAttackDamage(sensors, thetaMin, thetaMax, thetaRange);
+                changed |= StepAttackDamage(sensors);
             }
 
             int applied = changed ? SgdActuatorsApplier.ApplyToAllLivingMonsters() : 0;
@@ -289,8 +283,13 @@ namespace GeneticsArtifact.SgdEngine.Decision
             return Mathf.Clamp01(skill01);
         }
 
-        private static bool StepMaxHealth(in SgdSensorsSample sensors, float thetaMin, float thetaMax, float thetaRange)
+        private static bool StepMaxHealth(in SgdSensorsSample sensors)
         {
+            SgdAxisLimitProvider.GetMaxHealthLimits(out float floor, out float cap);
+            float thetaMin = Mathf.Log(floor);
+            float thetaMax = Mathf.Log(cap);
+            float thetaRange = Mathf.Max(0.0001f, thetaMax - thetaMin);
+
             float theta = Mathf.Clamp(SgdDecisionRuntimeState.MaxHealthTheta, thetaMin, thetaMax);
             float velocity = SgdDecisionRuntimeState.MaxHealthVelocity;
 
@@ -329,8 +328,13 @@ namespace GeneticsArtifact.SgdEngine.Decision
             return Mathf.Abs(after - before) > AxisApplyEpsilon;
         }
 
-        private static bool StepMoveSpeed(in SgdSensorsSample sensors, float thetaMin, float thetaMax, float thetaRange)
+        private static bool StepMoveSpeed(in SgdSensorsSample sensors)
         {
+            SgdAxisLimitProvider.GetMoveSpeedLimits(out float floor, out float cap);
+            float thetaMin = Mathf.Log(floor);
+            float thetaMax = Mathf.Log(cap);
+            float thetaRange = Mathf.Max(0.0001f, thetaMax - thetaMin);
+
             float theta = Mathf.Clamp(SgdDecisionRuntimeState.MoveSpeedTheta, thetaMin, thetaMax);
             float velocity = SgdDecisionRuntimeState.MoveSpeedVelocity;
 
@@ -369,8 +373,13 @@ namespace GeneticsArtifact.SgdEngine.Decision
             return Mathf.Abs(after - before) > AxisApplyEpsilon;
         }
 
-        private static bool StepAttackSpeed(in SgdSensorsSample sensors, float thetaMin, float thetaMax, float thetaRange)
+        private static bool StepAttackSpeed(in SgdSensorsSample sensors)
         {
+            SgdAxisLimitProvider.GetAttackSpeedLimits(out float floor, out float cap);
+            float thetaMin = Mathf.Log(floor);
+            float thetaMax = Mathf.Log(cap);
+            float thetaRange = Mathf.Max(0.0001f, thetaMax - thetaMin);
+
             float theta = Mathf.Clamp(SgdDecisionRuntimeState.AttackSpeedTheta, thetaMin, thetaMax);
             float velocity = SgdDecisionRuntimeState.AttackSpeedVelocity;
 
@@ -409,8 +418,13 @@ namespace GeneticsArtifact.SgdEngine.Decision
             return Mathf.Abs(after - before) > AxisApplyEpsilon;
         }
 
-        private static bool StepAttackDamage(in SgdSensorsSample sensors, float thetaMin, float thetaMax, float thetaRange)
+        private static bool StepAttackDamage(in SgdSensorsSample sensors)
         {
+            SgdAxisLimitProvider.GetAttackDamageLimits(out float floor, out float cap);
+            float thetaMin = Mathf.Log(floor);
+            float thetaMax = Mathf.Log(cap);
+            float thetaRange = Mathf.Max(0.0001f, thetaMax - thetaMin);
+
             float theta = Mathf.Clamp(SgdDecisionRuntimeState.AttackDamageTheta, thetaMin, thetaMax);
             float velocity = SgdDecisionRuntimeState.AttackDamageVelocity;
 
@@ -449,19 +463,6 @@ namespace GeneticsArtifact.SgdEngine.Decision
             return Mathf.Abs(after - before) > AxisApplyEpsilon;
         }
 
-        private static void GetGeneLimits(out float floor, out float cap)
-        {
-            floor = ConfigManager.geneFloor?.Value ?? 0.01f;
-            cap = ConfigManager.geneCap?.Value ?? 10f;
-            if (cap < floor)
-            {
-                (floor, cap) = (cap, floor);
-            }
-
-            // Avoid log(0) and other numeric weirdness.
-            floor = Mathf.Max(0.0001f, floor);
-            cap = Mathf.Max(floor, cap);
-        }
     }
 }
 

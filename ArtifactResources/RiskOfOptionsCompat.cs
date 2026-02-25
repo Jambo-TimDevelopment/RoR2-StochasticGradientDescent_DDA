@@ -1,4 +1,4 @@
-﻿using RiskOfOptions;
+using RiskOfOptions;
 using RiskOfOptions.OptionConfigs;
 using RiskOfOptions.Options;
 
@@ -34,6 +34,31 @@ namespace GeneticsArtifact
             ModSettingsManager.AddOption(
                 new SliderOption(ConfigManager.geneVarianceLimit,
                     new SliderConfig { min = 0.01f, max = 1f, formatString = "{0:#0.##%}" }));
+
+            ModSettingsManager.AddOption(
+                new SliderOption(ConfigManager.sgdHpFloor,
+                    new SliderConfig { min = 0.01f, max = 1f, formatString = "{0:0.##}x" }));
+            ModSettingsManager.AddOption(
+                new SliderOption(ConfigManager.sgdHpCap,
+                    new SliderConfig { min = 1f, max = 50f, formatString = "{0:#0.##}x" }));
+            ModSettingsManager.AddOption(
+                new SliderOption(ConfigManager.sgdMsFloor,
+                    new SliderConfig { min = 0.01f, max = 1f, formatString = "{0:0.##}x" }));
+            ModSettingsManager.AddOption(
+                new SliderOption(ConfigManager.sgdMsCap,
+                    new SliderConfig { min = 1f, max = 50f, formatString = "{0:#0.##}x" }));
+            ModSettingsManager.AddOption(
+                new SliderOption(ConfigManager.sgdAsFloor,
+                    new SliderConfig { min = 0.01f, max = 1f, formatString = "{0:0.##}x" }));
+            ModSettingsManager.AddOption(
+                new SliderOption(ConfigManager.sgdAsCap,
+                    new SliderConfig { min = 1f, max = 50f, formatString = "{0:#0.##}x" }));
+            ModSettingsManager.AddOption(
+                new SliderOption(ConfigManager.sgdDmgFloor,
+                    new SliderConfig { min = 0.01f, max = 1f, formatString = "{0:0.##}x" }));
+            ModSettingsManager.AddOption(
+                new SliderOption(ConfigManager.sgdDmgCap,
+                    new SliderConfig { min = 1f, max = 50f, formatString = "{0:#0.##}x" }));
 
             ModSettingsManager.AddOption(
                 new CheckBoxOption(ConfigManager.enableGeneLimitOverrides));

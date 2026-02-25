@@ -1,5 +1,3 @@
-using UnityEngine;
-
 namespace GeneticsArtifact.SgdEngine.Actuators
 {
     /// <summary>
@@ -28,7 +26,7 @@ namespace GeneticsArtifact.SgdEngine.Actuators
                 return;
             }
 
-            MaxHealthMultiplier = ClampToGeneLimits(multiplier);
+            MaxHealthMultiplier = SgdAxisLimitProvider.Clamp(GeneStat.MaxHealth, multiplier);
         }
 
         public static void SetMoveSpeedMultiplier(float multiplier)
@@ -38,7 +36,7 @@ namespace GeneticsArtifact.SgdEngine.Actuators
                 return;
             }
 
-            MoveSpeedMultiplier = ClampToGeneLimits(multiplier);
+            MoveSpeedMultiplier = SgdAxisLimitProvider.Clamp(GeneStat.MoveSpeed, multiplier);
         }
 
         public static void SetAttackSpeedMultiplier(float multiplier)
@@ -48,7 +46,7 @@ namespace GeneticsArtifact.SgdEngine.Actuators
                 return;
             }
 
-            AttackSpeedMultiplier = ClampToGeneLimits(multiplier);
+            AttackSpeedMultiplier = SgdAxisLimitProvider.Clamp(GeneStat.AttackSpeed, multiplier);
         }
 
         public static void SetAttackDamageMultiplier(float multiplier)
@@ -58,19 +56,7 @@ namespace GeneticsArtifact.SgdEngine.Actuators
                 return;
             }
 
-            AttackDamageMultiplier = ClampToGeneLimits(multiplier);
-        }
-
-        private static float ClampToGeneLimits(float multiplier)
-        {
-            float floor = ConfigManager.geneFloor?.Value ?? 0.01f;
-            float cap = ConfigManager.geneCap?.Value ?? 10f;
-            if (cap < floor)
-            {
-                (floor, cap) = (cap, floor);
-            }
-
-            return Mathf.Clamp(multiplier, floor, cap);
+            AttackDamageMultiplier = SgdAxisLimitProvider.Clamp(GeneStat.AttackDamage, multiplier);
         }
     }
 }

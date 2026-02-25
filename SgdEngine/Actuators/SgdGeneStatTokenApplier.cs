@@ -18,15 +18,8 @@ namespace GeneticsArtifact.SgdEngine.Actuators
             if (inventory == null) return;
             if (float.IsNaN(multiplier) || float.IsInfinity(multiplier) || multiplier <= 0f) return;
 
-            // Clamp defensively using existing mutation limits.
-            float floor = ConfigManager.geneFloor?.Value ?? 0.01f;
-            float cap = ConfigManager.geneCap?.Value ?? 10f;
-            if (cap < floor)
-            {
-                (floor, cap) = (cap, floor);
-            }
-
-            multiplier = Mathf.Clamp(multiplier, floor, cap);
+            // Clamp defensively using per-axis SGD limits.
+            multiplier = SgdAxisLimitProvider.Clamp(stat, multiplier);
 
             // 1 token = +/-1% change.
             int netTokens = Mathf.RoundToInt((multiplier - 1f) * 100f);

@@ -16,6 +16,10 @@ namespace GeneticsArtifact
         public static ConfigEntry<float> sgdNormTargetTimeToDieSeconds;
         public static ConfigEntry<float> sgdNormTargetTtkSeconds;
         public static ConfigEntry<float> sgdNormHitRateScalePerSecond;
+        public static ConfigEntry<float> sgdHpFloor, sgdHpCap;
+        public static ConfigEntry<float> sgdMsFloor, sgdMsCap;
+        public static ConfigEntry<float> sgdAsFloor, sgdAsCap;
+        public static ConfigEntry<float> sgdDmgFloor, sgdDmgCap;
 
         public static void Init(ConfigFile configFile)
         {
@@ -48,6 +52,44 @@ namespace GeneticsArtifact
                 new ConfigDefinition("SGD Sensor Normalization", "Hit Rate Scale (per second)"),
                 1.5f,
                 new ConfigDescription("Scale for normalizing hit rate (hits/sec) into [0..1]. Higher => less sensitive.", new AcceptableValueRange<float>(0.1f, 10f)));
+
+            // --- SGD / per-axis multiplier limits ---
+            // Keep defaults aligned with global mutation defaults to preserve behavior unless overridden.
+            sgdHpFloor = configFile.Bind<float>(
+                new ConfigDefinition("SGD Axis Limits", "HP Floor"),
+                0.01f,
+                new ConfigDescription("Minimum SGD multiplier for MaxHealth axis.", new AcceptableValueRange<float>(0.01f, 1f)));
+            sgdHpCap = configFile.Bind<float>(
+                new ConfigDefinition("SGD Axis Limits", "HP Cap"),
+                10f,
+                new ConfigDescription("Maximum SGD multiplier for MaxHealth axis.", new AcceptableValueRange<float>(1f, 50f)));
+
+            sgdMsFloor = configFile.Bind<float>(
+                new ConfigDefinition("SGD Axis Limits", "MoveSpeed Floor"),
+                0.01f,
+                new ConfigDescription("Minimum SGD multiplier for MoveSpeed axis.", new AcceptableValueRange<float>(0.01f, 1f)));
+            sgdMsCap = configFile.Bind<float>(
+                new ConfigDefinition("SGD Axis Limits", "MoveSpeed Cap"),
+                10f,
+                new ConfigDescription("Maximum SGD multiplier for MoveSpeed axis.", new AcceptableValueRange<float>(1f, 50f)));
+
+            sgdAsFloor = configFile.Bind<float>(
+                new ConfigDefinition("SGD Axis Limits", "AttackSpeed Floor"),
+                0.01f,
+                new ConfigDescription("Minimum SGD multiplier for AttackSpeed axis.", new AcceptableValueRange<float>(0.01f, 1f)));
+            sgdAsCap = configFile.Bind<float>(
+                new ConfigDefinition("SGD Axis Limits", "AttackSpeed Cap"),
+                10f,
+                new ConfigDescription("Maximum SGD multiplier for AttackSpeed axis.", new AcceptableValueRange<float>(1f, 50f)));
+
+            sgdDmgFloor = configFile.Bind<float>(
+                new ConfigDefinition("SGD Axis Limits", "AttackDamage Floor"),
+                0.01f,
+                new ConfigDescription("Minimum SGD multiplier for AttackDamage axis.", new AcceptableValueRange<float>(0.01f, 1f)));
+            sgdDmgCap = configFile.Bind<float>(
+                new ConfigDefinition("SGD Axis Limits", "AttackDamage Cap"),
+                10f,
+                new ConfigDescription("Maximum SGD multiplier for AttackDamage axis.", new AcceptableValueRange<float>(1f, 50f)));
         }
     }
 
