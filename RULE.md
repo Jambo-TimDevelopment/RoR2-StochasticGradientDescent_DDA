@@ -1,5 +1,7 @@
 # Правила проекта: DDA (SGD) для Risk of Rain 2
 
+> Краткое пользовательское описание проекта, ссылки на документацию по SGD DDA и инструкции по установке находятся в корневом файле `README.md`. Настоящий документ используется как **дизайн‑док и набор внутренних правил разработки**.
+
 Этот мод — исследовательская реализация **системы динамической адаптации уровня сложности** (Dynamic Difficulty Adjustment, DDA) для магистерской диссертации.
 
 - **Референс в репозитории**: существующий генетический алгоритм (папка `GeneticEngine/`).
@@ -62,7 +64,8 @@ C = (V_c + S_c) - (V_p + S_p)
 | `GeneticEngine/MasterGeneBehaviour.cs` | «Мастер‑копия» генов для типа монстра; `MutateFromChildren` — обучение по score |
 | `GeneticEngine/GeneTokenCalc.cs` | `RecalculateStatsAPI`: перевод генов в модификаторы статов |
 | `GeneticEngine/GeneTokens.cs` | ItemDef для GeneStat (MaxHealth, MoveSpeed, AttackSpeed, AttackDamage) |
-| `ArtifactResources/ConfigManager.cs` | BepInEx‑конфиг: `timeLimit`, `deathLimit`, `geneFloor`, `geneCap` и др. |
+| `ArtifactResources/ConfigManager.cs` | BepInEx‑конфиг: `timeLimit`, `deathLimit`, `geneFloor`, `geneCap` и др., а также отдельные лимиты для осей SGD (`sgdHpFloor/Cap`, `sgdMsFloor/Cap`, `sgdAsFloor/Cap`, `sgdDmgFloor/Cap`) |
+| `SgdEngine/SgdAxisLimitProvider.cs` | Источник безопасных лимитов по осям SGD (на основе конфига), используемых в модуле решений и актуаторах |
 
 ---
 
@@ -262,10 +265,10 @@ F(t) = Σ_i [ w_i · (S_c_i(t) - S_p_i(t))² ] + α · (V_c(t) - V_p(t))²
 
 ## Интеграция с текущим кодом
 
-- Когда `ActiveAlgorithm == Sgd` — использовать **отдельный SGD‑драйвер** в собственной папке, не модифицируя `GeneEngineDriver`.
-- Точка входа: `GeneticsArtifactPlugin.Awake` — инициализировать SGD‑драйвер только для режима `Sgd`; хуки Run_Start, CharacterBody_Start и т.п. — в отдельном классе драйвера.
+- Когда `ActiveAlgorithm == Sgd` — использовать **отдельный SGD‑драйвер** в собственной папке (`SgdEngine/`), не модифицируя `GeneEngineDriver`.
+- Точка входа: `GeneticsArtifactPlugin.Awake` — инициализировать SGD‑драйвер только для режима `Sgd`; хуки Run_Start, CharacterBody_Start и т.п. — находятся в отдельных классах драйвера и сенсоров (`SgdRuntimeDriver`, `SgdSensorsHooks`, актуаторы и др.).
 - Артефакт `ArtifactOfGenetics` остаётся общим: включение/выключение — через `dda_genetics` и `RunArtifactManager`.
-- Важно: команда `dda_algorithm sgd` сейчас переключает состояние (`DdaAlgorithmState.ActiveAlgorithm = Sgd`), но в текущем коде SGD‑логика помечена как «not yet implemented» — документация описывает целевую архитектуру и математику диссертации.
+- Команда `dda_algorithm sgd` переключает состояние (`DdaAlgorithmState.ActiveAlgorithm = Sgd`) и активирует **реализованную** SGD‑логику; подробная архитектура и описание реализации находятся в `Docs/SgdDda/*`.
 
 ---
 
