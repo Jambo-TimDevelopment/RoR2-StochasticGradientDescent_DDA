@@ -4,6 +4,38 @@
     <TargetFramework>netstandard2.1</TargetFramework>
   </PropertyGroup>
 
+  <!-- Optional local secrets (ignored by git) -->
+  <Import Project="TelemetrySecrets.props" Condition="Exists('TelemetrySecrets.props')" />
+
+  <PropertyGroup>
+    <TelemetryPostHogHost Condition="'$(TelemetryPostHogHost)' == ''">https://us.i.posthog.com</TelemetryPostHogHost>
+    <TelemetryPostHogProjectToken Condition="'$(TelemetryPostHogProjectToken)' == ''"></TelemetryPostHogProjectToken>
+    <TelemetrySemicolon>$([System.Char]::ConvertFromUtf32(59))</TelemetrySemicolon>
+  </PropertyGroup>
+
+  <Target Name="GenerateTelemetryBuildSecrets" BeforeTargets="BeforeCompile">
+    <PropertyGroup>
+      <TelemetryBuildSecretsFile>$(IntermediateOutputPath)TelemetryBuildSecrets.g.cs</TelemetryBuildSecretsFile>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <TelemetryBuildSecretsLines Include="namespace GeneticsArtifact.Telemetry {" />
+      <TelemetryBuildSecretsLines Include="internal static class TelemetryBuildSecrets {" />
+      <TelemetryBuildSecretsLines Include="internal const string PostHogHost = &quot;$(TelemetryPostHogHost)&quot;$(TelemetrySemicolon)" />
+      <TelemetryBuildSecretsLines Include="internal const string PostHogProjectToken = &quot;$(TelemetryPostHogProjectToken)&quot;$(TelemetrySemicolon)" />
+      <TelemetryBuildSecretsLines Include="}" />
+      <TelemetryBuildSecretsLines Include="}" />
+    </ItemGroup>
+
+    <WriteLinesToFile File="$(TelemetryBuildSecretsFile)"
+                      Overwrite="true"
+                      Lines="@(TelemetryBuildSecretsLines)" />
+
+    <ItemGroup>
+      <Compile Include="$(TelemetryBuildSecretsFile)" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <EmbeddedResource Include="ArtifactResources\genetics" />
   </ItemGroup>

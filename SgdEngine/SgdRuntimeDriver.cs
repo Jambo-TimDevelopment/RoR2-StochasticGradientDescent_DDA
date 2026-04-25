@@ -70,12 +70,6 @@ namespace GeneticsArtifact.SgdEngine
             }
             _wasSgdActiveLastFrame = isSgdActive;
 
-            // Hard gate: do nothing unless SGD is selected or overlay is enabled.
-            if (!isSgdActive && !DdaAlgorithmState.IsDebugOverlayEnabled)
-            {
-                return;
-            }
-
             CharacterBody body = FindAnyPlayerBody();
             if (body == null)
             {

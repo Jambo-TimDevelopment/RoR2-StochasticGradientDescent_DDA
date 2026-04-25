@@ -19,6 +19,21 @@ namespace GeneticsArtifact.CheatManager
         /// Whether the debug overlay is visible on screen.
         /// </summary>
         public static bool IsDebugOverlayEnabled { get; set; }
+
+        public static string GetTelemetryMode()
+        {
+            if (ActiveAlgorithm == DdaAlgorithmType.Sgd)
+            {
+                return "SGD";
+            }
+
+            if (ActiveAlgorithm == DdaAlgorithmType.Genetic && IsGeneticAlgorithmEnabled)
+            {
+                return "GA";
+            }
+
+            return "FixedDisabled";
+        }
     }
 
     public enum DdaAlgorithmType

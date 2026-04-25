@@ -1,4 +1,6 @@
 using BepInEx.Configuration;
+using System;
+using GeneticsArtifact.Telemetry;
 
 namespace GeneticsArtifact
 {
@@ -20,6 +22,17 @@ namespace GeneticsArtifact
         public static ConfigEntry<float> sgdMsFloor, sgdMsCap;
         public static ConfigEntry<float> sgdAsFloor, sgdAsCap;
         public static ConfigEntry<float> sgdDmgFloor, sgdDmgCap;
+
+        // Research telemetry / PostHog ingestion.
+        public static ConfigEntry<bool> telemetryEnabled;
+        public static ConfigEntry<string> telemetryAnonymousUserId;
+        public static ConfigEntry<string> telemetryExperimentId;
+        public static ConfigEntry<float> telemetrySampleIntervalSeconds;
+        public static ConfigEntry<float> telemetryFlushIntervalSeconds;
+        public static ConfigEntry<int> telemetryMaxQueueSize;
+        public static ConfigEntry<float> telemetryJumpThreshold;
+        public static ConfigEntry<float> telemetryDegradationThreshold;
+        public static ConfigEntry<float> telemetryRecoveryThreshold;
 
         public static void Init(ConfigFile configFile)
         {
@@ -90,6 +103,58 @@ namespace GeneticsArtifact
                 new ConfigDefinition("SGD Axis Limits", "AttackDamage Cap"),
                 10f,
                 new ConfigDescription("Maximum SGD multiplier for AttackDamage axis.", new AcceptableValueRange<float>(1f, 50f)));
+
+            // --- Research telemetry ---
+            telemetryEnabled = configFile.Bind<bool>(
+                new ConfigDefinition("Research Telemetry", "Telemetry Enabled"),
+                true,
+                new ConfigDescription("Send anonymous DDA research telemetry to the configured PostHog project. Disable to opt out."));
+
+            telemetryAnonymousUserId = configFile.Bind<string>(
+                new ConfigDefinition("Research Telemetry", "Anonymous User Id"),
+                "",
+                new ConfigDescription("Anonymous UUID for grouping runs from the same installation. Generated automatically if empty."));
+
+            if (string.IsNullOrWhiteSpace(telemetryAnonymousUserId.Value))
+            {
+                telemetryAnonymousUserId.Value = "anon-" + Guid.NewGuid().ToString("N");
+                configFile.Save();
+            }
+
+            telemetryExperimentId = configFile.Bind<string>(
+                new ConfigDefinition("Research Telemetry", "Experiment Id"),
+                "thesis_v1",
+                new ConfigDescription("Experiment label used to segment telemetry in a single PostHog project."));
+
+            telemetrySampleIntervalSeconds = configFile.Bind<float>(
+                new ConfigDefinition("Research Telemetry", "Sample Interval Seconds"),
+                10f,
+                new ConfigDescription("How often to sample runtime DDA telemetry.", new AcceptableValueRange<float>(1f, 120f)));
+
+            telemetryFlushIntervalSeconds = configFile.Bind<float>(
+                new ConfigDefinition("Research Telemetry", "Flush Interval Seconds"),
+                20f,
+                new ConfigDescription("How often to flush queued telemetry events to PostHog.", new AcceptableValueRange<float>(5f, 300f)));
+
+            telemetryMaxQueueSize = configFile.Bind<int>(
+                new ConfigDefinition("Research Telemetry", "Max Queue Size"),
+                512,
+                new ConfigDescription("Maximum in-memory telemetry events kept before oldest events are dropped.", new AcceptableValueRange<int>(32, 5000)));
+
+            telemetryJumpThreshold = configFile.Bind<float>(
+                new ConfigDefinition("Research Telemetry", "Jump Threshold"),
+                0.10f,
+                new ConfigDescription("Absolute multiplier delta treated as a sharp difficulty jump.", new AcceptableValueRange<float>(0.01f, 1f)));
+
+            telemetryDegradationThreshold = configFile.Bind<float>(
+                new ConfigDefinition("Research Telemetry", "Degradation Threshold"),
+                0.70f,
+                new ConfigDescription("Stress signal threshold that starts a degradation episode.", new AcceptableValueRange<float>(0.1f, 1f)));
+
+            telemetryRecoveryThreshold = configFile.Bind<float>(
+                new ConfigDefinition("Research Telemetry", "Recovery Threshold"),
+                0.35f,
+                new ConfigDescription("Stress signal threshold that ends a degradation episode.", new AcceptableValueRange<float>(0f, 0.9f)));
         }
     }
 

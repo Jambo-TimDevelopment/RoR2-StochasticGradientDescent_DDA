@@ -1,4 +1,3 @@
-using GeneticsArtifact.CheatManager;
 using RoR2;
 using UnityEngine;
 
@@ -27,11 +26,6 @@ namespace GeneticsArtifact.SgdEngine
 
         public static void Tick(CharacterBody playerBody, float dt, in SgdVirtualPowerSample vp)
         {
-            if (DdaAlgorithmState.ActiveAlgorithm != DdaAlgorithmType.Sgd && !DdaAlgorithmState.IsDebugOverlayEnabled)
-            {
-                return;
-            }
-
             if (playerBody == null)
             {
                 Reset(null);
@@ -50,11 +44,6 @@ namespace GeneticsArtifact.SgdEngine
         private static void HealthComponent_TakeDamage(On.RoR2.HealthComponent.orig_TakeDamage orig, HealthComponent self, DamageInfo damageInfo)
         {
             orig(self, damageInfo);
-
-            if (DdaAlgorithmState.ActiveAlgorithm != DdaAlgorithmType.Sgd && !DdaAlgorithmState.IsDebugOverlayEnabled)
-            {
-                return;
-            }
 
             if (self == null || damageInfo.damage <= 0f) return;
 
@@ -87,19 +76,16 @@ namespace GeneticsArtifact.SgdEngine
             // Detect monster death for TTK and player death for DeathsPerWindow.
             try
             {
-                if (DdaAlgorithmState.ActiveAlgorithm == DdaAlgorithmType.Sgd || DdaAlgorithmState.IsDebugOverlayEnabled)
+                if (self != null)
                 {
-                    if (self != null)
+                    if (_trackedPlayerBody != null && self == _trackedPlayerBody)
                     {
-                        if (_trackedPlayerBody != null && self == _trackedPlayerBody)
-                        {
-                            // Player body destroyed. This is a proxy for "death" (may include some edge cases).
-                            _estimator.ObservePlayerDeath();
-                        }
-                        else if (self.teamComponent != null && self.teamComponent.teamIndex == TeamIndex.Monster)
-                        {
-                            _estimator.ObserveMonsterDeath(self);
-                        }
+                        // Player body destroyed. This is a proxy for "death" (may include some edge cases).
+                        _estimator.ObservePlayerDeath();
+                    }
+                    else if (self.teamComponent != null && self.teamComponent.teamIndex == TeamIndex.Monster)
+                    {
+                        _estimator.ObserveMonsterDeath(self);
                     }
                 }
             }

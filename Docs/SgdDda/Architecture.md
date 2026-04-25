@@ -28,6 +28,7 @@
       - исходящий урон по монстрам;
       - смерти игрока и монстров (для TTK иDeathsPerWindow);
     - Обновляет оценку сенсоров через `SgdSensorsEstimator` и записывает её в `SgdSensorsRuntimeState`.
+    - Сенсоры обновляются независимо от выбранного режима DDA, чтобы телеметрия была сопоставима для SGD, GA и фиксированного режима.
   - Состояние:
     - `SgdSensorsRuntimeState` содержит последний `SgdSensorsSample` и флаг наличия выборки.
 
@@ -62,9 +63,7 @@
       - вызывает `self.RecalculateStats()` для пересчёта характеристик.
   - Состояние актуаторов:
     - `SgdActuatorsRuntimeState` хранит текущие множители по осям.
-    - Используется как:
-      - источник правды при применении к новым монстрам;
-      - источник текущих значений для синхронизации с `SgdDecisionRuntimeState`.
+    - Используется как основное хранилище актуальных множителей, применяемых к новым монстрам, и источник текущих значений для синхронизации с `SgdDecisionRuntimeState`.
   - Глобальное применение:
     - `SgdActuatorsApplier.ApplyToAllLivingMonsters()` обновляет уже живых монстров при изменении множителей.
 
@@ -104,4 +103,45 @@ flowchart TD
   - SGD DDA **не модифицирует** код в `GeneticEngine/`.
   - Общая точка пересечения — использование тех же `GeneStat` и `GeneTokens` через `SgdGeneStatTokenApplier`.
   - Это обеспечивает совместимость и независимое развитие двух алгоритмов DDA.
+
+### Telemetry
+
+Система телеметрии реализована отдельным модулем `Telemetry/` и не принимает решений о сложности. Она читает уже рассчитанные runtime-состояния:
+
+- `SgdSensorsRuntimeState` — нормализованные сенсоры игрока;
+- `SgdRuntimeState` — виртуальная мощность игрока `V_p`;
+- `SgdDecisionRuntimeState` и `SgdActuatorsRuntimeState` — состояние SGD и множители;
+- `GeneEngineDriver`/`MasterGeneBehaviour` только на чтение — усредненные множители GA;
+- `DdaAlgorithmState.GetTelemetryMode()` — метка режима `SGD`, `GA` или `FixedDisabled`.
+
+Поток телеметрии:
+
+```mermaid
+flowchart TD
+  runStart[RunStart] --> telemetryDriver[TelemetryRuntimeDriver]
+  telemetryDriver --> sampleBuilder[TelemetrySampleBuilder]
+  sampleBuilder --> sensorsRuntimeState[SgdSensorsRuntimeState]
+  sampleBuilder --> ddaRuntimeState[DdaRuntimeStates]
+  sampleBuilder --> eventQueue[TelemetryEventQueue]
+  eventQueue --> postHogClient[PostHogBatchClient]
+  postHogClient --> postHogCloud[PostHogCloud]
+```
+
+События отправляются в PostHog через `/batch/`:
+
+- `dda_session_start` — начало забега, версия мода, `session_id`, `experiment_id`, режим DDA;
+- `dda_sample` — периодический срез сенсоров, ошибок `challenge01 - skill01`, множителей и `V_p/V_c`;
+- `dda_recovery` — завершение эпизода деградации для проверки H4;
+- `dda_session_end` — агрегаты забега: средние ошибки, jump-rate, recovery-time.
+
+Host/token PostHog не берутся из BepInEx config, чтобы исключить влияние ранее созданных cfg-файлов и не сохранять токен на диске игры.
+Они подставляются на этапе сборки из `TelemetrySecrets.props` (файл в корне репозитория, игнорируется git) и вшиваются в DLL через `TelemetryBuildSecrets`.
+
+В BepInEx config остаются только пользовательские параметры телеметрии (opt-out и частоты):
+
+- `Research Telemetry / Telemetry Enabled`;
+- `Research Telemetry / Sample Interval Seconds`;
+- `Research Telemetry / Flush Interval Seconds`.
+
+Персональные данные не собираются: используется локально сгенерированный anonymous UUID, а события отправляются с `$process_person_profile = false`.
 
