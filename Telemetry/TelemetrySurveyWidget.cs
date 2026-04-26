@@ -136,6 +136,7 @@ namespace GeneticsArtifact.Telemetry
         private bool _savedEventSystemState;
         private bool _previousEventSystemEnabled;
         private EventSystem _previousEventSystem;
+        private bool _isWaitingForQuitFlush;
 
         public static void EnsureAttached()
         {
@@ -210,6 +211,10 @@ namespace GeneticsArtifact.Telemetry
                 return;
             }
 
+            // RoR2 UI can override cursor state (pause/menu logic). Keep it visible while the survey is open.
+            Cursor.visible = true;
+            Cursor.lockState = CursorLockMode.None;
+
             EnsureStyles();
             DrawDimmedOverlay();
 
@@ -247,29 +252,35 @@ namespace GeneticsArtifact.Telemetry
 
             GUILayout.Space(14f);
             GUILayout.BeginHorizontal();
-            GUI.enabled = _fairnessLikert > 0 && _continuityLikert > 0;
+            GUI.enabled = !_isWaitingForQuitFlush && _fairnessLikert > 0 && _continuityLikert > 0;
             if (GUILayout.Button(text.SubmitButton, _buttonStyle, GUILayout.Height(48f)))
             {
                 SubmitSurvey();
             }
-            GUI.enabled = true;
+            GUI.enabled = !_isWaitingForQuitFlush;
 
             if (GUILayout.Button(_quitAfterClose ? text.SkipAndQuitButton : text.CloseButton, _buttonStyle, GUILayout.Height(48f)))
             {
+                string comment = "ui_trigger=" + _triggerReason;
                 CloseWidget();
-                TelemetryRuntimeDriver.SkipPendingSurvey();
+                TelemetryRuntimeDriver.SkipPendingSurvey(comment);
                 if (_quitAfterClose)
                 {
-                    _allowQuit = true;
-                    Application.Quit();
+                    BeginQuitAfterFlush();
                 }
             }
+            GUI.enabled = true;
             GUILayout.EndHorizontal();
 
             if (_fairnessLikert <= 0 || _continuityLikert <= 0)
             {
                 GUILayout.Space(6f);
                 GUILayout.Label(text.MissingAnswers, _missingStyle);
+            }
+            else if (_isWaitingForQuitFlush)
+            {
+                GUILayout.Space(6f);
+                GUILayout.Label(Application.systemLanguage == SystemLanguage.Russian ? "Отправка телеметрии перед выходом..." : "Sending telemetry before quitting...", _missingStyle);
             }
 
             GUI.DragWindow(new Rect(0f, 0f, _windowRect.width, 24f));
@@ -304,13 +315,35 @@ namespace GeneticsArtifact.Telemetry
 
             if (TelemetryRuntimeDriver.RecordPostSessionSurvey(_fairnessLikert, _continuityLikert, comment))
             {
-                CloseWidget();
                 if (_quitAfterClose)
                 {
-                    _allowQuit = true;
-                    Application.Quit();
+                    CloseWidget();
+                    BeginQuitAfterFlush();
+                    return;
                 }
+
+                CloseWidget();
             }
+        }
+
+        private void BeginQuitAfterFlush()
+        {
+            if (_isWaitingForQuitFlush)
+            {
+                return;
+            }
+
+            _isWaitingForQuitFlush = true;
+            StartCoroutine(QuitAfterFlushRoutine());
+        }
+
+        private System.Collections.IEnumerator QuitAfterFlushRoutine()
+        {
+            // Best-effort: try to flush everything that is queued right now.
+            yield return PostHogBatchClient.FlushAllQueuedEvents(maxSeconds: 10f, maxBatches: 128);
+
+            _allowQuit = true;
+            Application.Quit();
         }
 
         private void CloseWidget()

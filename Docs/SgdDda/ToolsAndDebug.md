@@ -7,9 +7,11 @@
 Выбор активного алгоритма DDA вынесен в общий модуль состояния:
 
 - `DdaAlgorithmState.ActiveAlgorithm` — перечисление, задающее текущий алгоритм:
+  - `DdaAlgorithmType.Fixed`
   - `DdaAlgorithmType.Genetic`
   - `DdaAlgorithmType.Sgd`
-- `DdaAlgorithmState.IsGeneticAlgorithmEnabled` — флаг для обратной совместимости с исходным поведением.
+- `DdaAlgorithmState.Activate(...)` — единая точка переключения режима DDA.
+- `DdaAlgorithmState.IsGeneticAlgorithmEnabled` — флаг для обратной совместимости с исходным поведением GA.
 - `DdaAlgorithmState.IsDebugOverlayEnabled` — флаг включения отладочного overlay и сбора телеметрии даже при неактивном SGD.
 
 При включении SGD‑режима важно корректно сбрасывать состояние:
@@ -39,9 +41,7 @@
 Типичные сценарии, которые удобно оборачивать в команды:
 
 - **Переключение алгоритма DDA**:
-  - команда вида `ga_dda_sgd_on` / `ga_dda_sgd_off`, которая:
-    - устанавливает `DdaAlgorithmState.ActiveAlgorithm` в нужное значение;
-    - при включении SGD выполняет полный сброс его состояния.
+  - `dda_algorithm fixed|genetic|sgd` (синонимы: `fls`, `ga`).
 - **Принудительное обновление актуаторов**:
   - команда, которая вызывает `SgdActuatorsApplier.ApplyToAllLivingMonsters()` для моментального применения текущих множителей после ручной корректировки.
 - **Диагностика состояний**:
@@ -52,6 +52,15 @@
     - параметры \\( \\theta \\) и velocity из `SgdDecisionRuntimeState`.
 
 Конкретные имена команд зависят от того, как уже устроен ваш `CheatManager`. При добавлении новых команд важно не нарушать существующую структуру и придерживаться стиля остальных читов мода.
+
+Дополнительно для экспериментов:
+
+- **Анкета H5/H6 из консоли**:
+  - `dda_survey <fairness 1-7> <continuity 1-7> [comment]`
+  - отправляет событие `dda_post_session_survey`.
+
+- **Шаг SGD по времени боя**:
+  - `dda_sgd_step_time [seconds]`
 
 ### Debug‑overlay и визуализация
 
@@ -159,4 +168,45 @@ Overlay удобно реализовать как простой текстов
 3. Убедиться, что:
    - SGD успевает поднять сложность после улучшения билда;
    - при ухудшении ситуации (случайная плохая комната, неудачный босс) алгоритм не «запирает» игрока в слишком высокой сложности.
+
+### PostHog экспорт данных (инструментарий исследования)
+
+В `tools/` добавлены скрипты для выгрузки событий/персон из PostHog в `tools/posthog_exports/`:
+
+- `tools/posthog_export_events.ps1` / `.bat`
+- `tools/posthog_export_all.ps1` / `.bat`
+
+Папка `tools/posthog_exports/` добавлена в `.gitignore` и не должна коммититься.
+
+### H5/H6: протокол опроса и проверка выгрузки
+
+В исследовании H5–H6 измеряются субъективно, через пост‑сессионный опросник (Likert 1–7):
+
+- **H5 fairness**: «насколько справедливой ощущалась сложность» (1 — совсем несправедливо, 7 — полностью справедливо).
+- **H6 continuity**: «насколько плавной/непрерывной ощущалась кривая сложности» (1 — очень рвано, 7 — очень плавно).
+
+В телеметрии это приходит как:
+
+- событие `dda_post_session_survey` с полями:
+  - `fairness_likert_1_7`
+  - `continuity_likert_1_7`
+  - `survey_comment` (включает `ui_trigger=...`)
+- а также дублируется в `dda_session_end` для удобной агрегации.
+
+Если пользователь закрывает окно без отправки, логируется `dda_post_session_survey_skipped` (и сессия завершается обычным `dda_session_end`).
+
+#### Валидатор экспорта (JSONL)
+
+Чтобы быстро проверить, что после каждого `dda_session_end` в экспорте есть либо survey, либо skipped, используйте:
+
+```bash
+python tools/validate_posthog_survey.py tools/posthog_exports/ALL_events_*.jsonl
+```
+
+Опционально вывести «OK»‑сессии:
+
+```bash
+python tools/validate_posthog_survey.py tools/posthog_exports/ALL_events_*.jsonl --show-ok
+```
+
 

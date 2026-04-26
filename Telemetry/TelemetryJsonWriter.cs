@@ -159,6 +159,13 @@ namespace GeneticsArtifact.Telemetry
                                 sb.Append("\\u");
                                 sb.Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
                             }
+                            else if (c > 127)
+                            {
+                                // Keep payload ASCII-only to avoid any downstream encoding/display issues in exports.
+                                // PostHog will decode JSON escapes back into proper Unicode.
+                                sb.Append("\\u");
+                                sb.Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+                            }
                             else
                             {
                                 sb.Append(c);

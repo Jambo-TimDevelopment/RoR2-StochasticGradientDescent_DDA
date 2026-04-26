@@ -1,11 +1,51 @@
 using System.Collections;
 using System.Text;
+using UnityEngine;
 using UnityEngine.Networking;
 
 namespace GeneticsArtifact.Telemetry
 {
     internal static class PostHogBatchClient
     {
+        public static IEnumerator FlushAllQueuedEvents(float maxSeconds = 8f, int maxBatches = 64)
+        {
+            if (!ConfigManager.telemetryEnabled.Value)
+            {
+                yield break;
+            }
+
+            float startedAt = Time.realtimeSinceStartup;
+            int batches = 0;
+
+            while (TelemetryEventQueue.Count > 0)
+            {
+                if (batches >= maxBatches)
+                {
+                    GeneticsArtifactPlugin.geneticLogSource?.LogWarning("[Telemetry] PostHog flush stopped: maxBatches reached (" + maxBatches + "). Remaining=" + TelemetryEventQueue.Count);
+                    yield break;
+                }
+
+                if (Time.realtimeSinceStartup - startedAt > maxSeconds)
+                {
+                    GeneticsArtifactPlugin.geneticLogSource?.LogWarning("[Telemetry] PostHog flush stopped: timeout (" + maxSeconds + "s). Remaining=" + TelemetryEventQueue.Count);
+                    yield break;
+                }
+
+                int before = TelemetryEventQueue.Count;
+                yield return FlushQueuedEvents();
+                batches++;
+
+                // If a batch failed, it is restored. Avoid busy-looping on repeated failures.
+                if (TelemetryEventQueue.Count >= before)
+                {
+                    yield break;
+                }
+
+                // Yield one frame between batches so quit flows can breathe.
+                yield return null;
+            }
+        }
+
         public static IEnumerator FlushQueuedEvents()
         {
             if (!ConfigManager.telemetryEnabled.Value)

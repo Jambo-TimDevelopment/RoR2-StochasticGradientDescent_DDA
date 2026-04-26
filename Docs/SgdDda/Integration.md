@@ -8,9 +8,12 @@
 
 - `DdaAlgorithmState`:
   - `ActiveAlgorithm` — перечисление, выбирающее текущий алгоритм:
+    - `Fixed` — фиксированная сложность (FLS) для сравнительного режима.
     - `Genetic` — используется исходный генетический алгоритм.
     - `Sgd` — включается SGD DDA.
+  - `Activate(DdaAlgorithmType)` — единая точка переключения режима DDA.
   - `IsGeneticAlgorithmEnabled` — флаг, отражающий первоначальное поведение артефакта Genetics.
+  - `ShouldRunGeneticEngine()` — предикат запуска генетического движка (GA).
   - `IsDebugOverlayEnabled` — включает сбор телеметрии и отладочный overlay независимо от выбора алгоритма.
 
 SGD DDA **не меняет** правила включения артефакта в игре:
@@ -112,6 +115,17 @@ SGD DDA максимально изолирован от уже существу
 4. При необходимости включите debug‑overlay (`DdaAlgorithmState.IsDebugOverlayEnabled`), чтобы:
    - убедиться, что сенсоры и решение работают;
    - наблюдать за эволюцией множителей и соотношением skill/challenge.
+
+### Research rotation (FLS → GA → SGD)
+
+Для экспериментальной серии поддерживается авто‑ротация режимов на старте каждого нового забега:
+
+- файл: `CheatManager/DdaRunModeRotator.cs`
+- конфиги:
+  - `Research DDA Rotation / Auto Rotate Algorithms`
+  - `Research DDA Rotation / Last Run Algorithm`
+
+Это помогает получать сопоставимые сессии по режимам без ручного переключения.
 
 ### Рекомендации по дальнейшей интеграции
 

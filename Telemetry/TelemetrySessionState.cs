@@ -58,6 +58,8 @@ namespace GeneticsArtifact.Telemetry
         public int SurveyFairnessLikert { get; private set; }
         public int SurveyContinuityLikert { get; private set; }
         public string SurveyComment { get; private set; } = "";
+        public bool HasSurveyCompleted { get; private set; }
+        public bool HasSessionEndQueued { get; private set; }
         public bool HasSurvey => SurveyFairnessLikert > 0 && SurveyContinuityLikert > 0;
 
         public float PreviousMaxHealthMultiplier { get; private set; } = 1f;
@@ -106,6 +108,8 @@ namespace GeneticsArtifact.Telemetry
             SurveyFairnessLikert = 0;
             SurveyContinuityLikert = 0;
             SurveyComment = "";
+            HasSurveyCompleted = false;
+            HasSessionEndQueued = false;
             PreviousMaxHealthMultiplier = 1f;
             PreviousMoveSpeedMultiplier = 1f;
             PreviousAttackSpeedMultiplier = 1f;
@@ -147,6 +151,20 @@ namespace GeneticsArtifact.Telemetry
             SurveyFairnessLikert = Mathf.Clamp(fairnessLikert, 1, 7);
             SurveyContinuityLikert = Mathf.Clamp(continuityLikert, 1, 7);
             SurveyComment = comment ?? "";
+            HasSurveyCompleted = true;
+        }
+
+        public void RecordSurveySkipped(string comment)
+        {
+            SurveyFairnessLikert = 0;
+            SurveyContinuityLikert = 0;
+            SurveyComment = comment ?? "";
+            HasSurveyCompleted = true;
+        }
+
+        public void MarkSessionEndQueued()
+        {
+            HasSessionEndQueued = true;
         }
 
         public void RecordSample(

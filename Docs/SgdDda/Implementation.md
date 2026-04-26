@@ -211,3 +211,26 @@ error = challenge01 - skill01
 - безопасно изменять множители извне (например, через консольные команды или debug‑панель);
 - сохранять корректность SGD даже при ручной подстройке сложности.
 
+### Research telemetry v2 (для проверки гипотез H1–H6)
+
+Модуль `Telemetry/` формирует события в PostHog так, чтобы их можно было напрямую использовать для метрик из отчёта:
+
+- `e_i(t) = challenge01_i(t) - skill01_i(t)`:
+  - логируется как `axis_*_error` и `axis_*_abs_error`.
+- `m_i(t)`:
+  - логируется как `axis_*_multiplier` и `axis_*_delta_multiplier`.
+- `V_p(t)`:
+  - логируется как `virtual_power_total` (+ компоненты offense/defense/mobility).
+- `V_c(t)`:
+  - логируется как `virtual_challenge_total`.
+
+В `telemetry_schema_version = 2` дополнительно логируются:
+
+- сегментация эксперимента: `participant_id`, `condition_order`, `run_attempt_index`, seeds;
+- фиксация порогов проверки: `tau_jump`, `epsilon_v`, `epsilon_stable`, `degradation_threshold`, `recovery_threshold`;
+- снимок части гиперпараметров SGD/GA (для воспроизводимости);
+- качество данных: `missed_sample_intervals`, `minimum_session_seconds`, `is_quality_excluded_short_session`;
+- события UX‑анкеты:
+  - `dda_post_session_survey` с полями `fairness_likert_1_7` и `continuity_likert_1_7`;
+  - UI реализован в `Telemetry/TelemetrySurveyWidget.cs`.
+

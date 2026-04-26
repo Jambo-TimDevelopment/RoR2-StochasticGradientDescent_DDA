@@ -4,7 +4,7 @@
 
 **Sensors → Decision → Actuators → Мир RoR2**
 
-При этом выбор активного алгоритма (генетический или SGD) контролируется через `DdaAlgorithmState.ActiveAlgorithm`.
+При этом выбор активного алгоритма (фиксированный / генетический / SGD) контролируется через `DdaAlgorithmState.ActiveAlgorithm`.
 
 ### Основные подсистемы
 
@@ -104,7 +104,7 @@ flowchart TD
   - Общая точка пересечения — использование тех же `GeneStat` и `GeneTokens` через `SgdGeneStatTokenApplier`.
   - Это обеспечивает совместимость и независимое развитие двух алгоритмов DDA.
 
-### Telemetry
+### Telemetry (PostHog)
 
 Система телеметрии реализована отдельным модулем `Telemetry/` и не принимает решений о сложности. Она читает уже рассчитанные runtime-состояния:
 
@@ -112,7 +112,7 @@ flowchart TD
 - `SgdRuntimeState` — виртуальная мощность игрока `V_p`;
 - `SgdDecisionRuntimeState` и `SgdActuatorsRuntimeState` — состояние SGD и множители;
 - `GeneEngineDriver`/`MasterGeneBehaviour` только на чтение — усредненные множители GA;
-- `DdaAlgorithmState.GetTelemetryMode()` — метка режима `SGD`, `GA` или `FixedDisabled`.
+- `DdaAlgorithmState.GetTelemetryMode()` — метка режима `SGD`, `GA` или `FLS` (fixed level setting).
 
 Поток телеметрии:
 
@@ -127,21 +127,46 @@ flowchart TD
   postHogClient --> postHogCloud[PostHogCloud]
 ```
 
-События отправляются в PostHog через `/batch/`:
+События отправляются в PostHog через `/batch/`.
+Схема событий версионируется полем `telemetry_schema_version` (актуальная: `2`).
+
+Основные события:
 
 - `dda_session_start` — начало забега, версия мода, `session_id`, `experiment_id`, режим DDA;
 - `dda_sample` — периодический срез сенсоров, ошибок `challenge01 - skill01`, множителей и `V_p/V_c`;
-- `dda_recovery` — завершение эпизода деградации для проверки H4;
-- `dda_session_end` — агрегаты забега: средние ошибки, jump-rate, recovery-time.
+- `dda_degradation_start` — начало эпизода деградации (с причиной/триггером);
+- `dda_degradation_end` — завершение эпизода деградации;
+- `dda_recovery` — завершение эпизода деградации (время восстановления для проверки H4);
+- `dda_player_death` — событие смерти игрока (контекстно для H4 и качества данных);
+- `dda_post_session_survey` — послесессионный опрос (H5/H6);
+- `dda_session_end` — агрегаты забега: средние ошибки, jump-rate, mean virtual gap, recovery-time, качество данных.
+
+Ключевые поля для исследовательских гипотез H1–H6:
+
+- **H1/H2**: `axis_*_skill01`, `axis_*_challenge01`, `axis_*_abs_error`, `axis_*_multiplier`, `axis_*_delta_multiplier`, `axis_*_is_jump`, `tau_jump`.
+- **H3**: `virtual_power_total`, `virtual_challenge_total`, `virtual_gap_abs`, `delta_virtual_power`, `delta_virtual_challenge`, `epsilon_v`.
+- **H4**: `degradation_signal`, `is_degraded`, `recovery_elapsed_seconds`, `degradation_threshold`, `recovery_threshold`, `epsilon_stable`, `is_within_stable_error_epsilon`.
+- **H5/H6**: `fairness_likert_1_7`, `continuity_likert_1_7` (из `dda_post_session_survey` и дублируются в `dda_session_end`).
 
 Host/token PostHog не берутся из BepInEx config, чтобы исключить влияние ранее созданных cfg-файлов и не сохранять токен на диске игры.
 Они подставляются на этапе сборки из `TelemetrySecrets.props` (файл в корне репозитория, игнорируется git) и вшиваются в DLL через `TelemetryBuildSecrets`.
 
-В BepInEx config остаются только пользовательские параметры телеметрии (opt-out и частоты):
+В BepInEx config остаются пользовательские параметры телеметрии и параметры эксперимента (segmentation + пороги верификации):
 
 - `Research Telemetry / Telemetry Enabled`;
 - `Research Telemetry / Sample Interval Seconds`;
 - `Research Telemetry / Flush Interval Seconds`.
 
+Дополнительно (schema v2) логируются: `participant_id`, `condition_order`, `run_attempt_index`, seeds, пороги `epsilon_v/epsilon_stable`, минимальная длительность забега для quality-меток, а также снимок части гиперпараметров SGD/GA.
+
 Персональные данные не собираются: используется локально сгенерированный anonymous UUID, а события отправляются с `$process_person_profile = false`.
+
+### Post-run survey UI (H5/H6)
+
+Для гипотез H5/H6 используется внутриигровой виджет `TelemetrySurveyWidget`:
+
+- показывается после смерти, победы/`game over` и при попытке выхода из игры, если ответы ещё не отправлены;
+- содержит 2 шкалы Likert 1–7 с пояснениями к вариантам (снижение субъективной интерпретации);
+- имеет RU/EN локализацию по `Application.systemLanguage` (RU только для `Russian`, иначе EN);
+- отправляет событие `dda_post_session_survey` и сохраняет ответы в `dda_session_end`.
 

@@ -130,6 +130,14 @@ namespace GeneticsArtifact.Telemetry
             return new TelemetryEvent("dda_post_session_survey", props);
         }
 
+        public static TelemetryEvent BuildPostSessionSurveySkipped(TelemetrySessionState session, string comment)
+        {
+            var props = BuildCommonProperties(session);
+            props["event_kind"] = "post_session_survey_skipped";
+            props["survey_comment"] = comment ?? "";
+            return new TelemetryEvent("dda_post_session_survey_skipped", props);
+        }
+
         public static TelemetryEvent BuildSessionEnd(TelemetrySessionState session, string endReason)
         {
             var props = BuildCommonProperties(session);

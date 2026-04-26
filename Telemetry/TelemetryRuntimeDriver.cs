@@ -28,7 +28,7 @@ namespace GeneticsArtifact.Telemetry
             GetSurveySession() != null;
 
         public static bool HasSubmittedSurvey =>
-            GetSurveySession()?.HasSurvey == true;
+            GetSurveySession()?.HasSurveyCompleted == true;
 
         public static bool RecordPostSessionSurvey(int fairnessLikert, int continuityLikert, string comment)
         {
@@ -46,6 +46,14 @@ namespace GeneticsArtifact.Telemetry
                     session.SurveyFairnessLikert,
                     session.SurveyContinuityLikert,
                     session.SurveyComment));
+
+                // Ensure survey always has a session_end companion in the export (e.g. on immediate quit).
+                if (!session.HasSessionEndQueued)
+                {
+                    session.MarkSessionEndQueued();
+                    TelemetryEventQueue.Enqueue(TelemetrySampleBuilder.BuildSessionEnd(session, "post_session_survey_submitted"));
+                }
+
                 CompletePendingSessionEndIfNeeded();
                 StartAnyFlushIfPossible();
             }
@@ -65,6 +73,44 @@ namespace GeneticsArtifact.Telemetry
 
         public static void SkipPendingSurvey()
         {
+            TelemetrySessionState session = GetSurveySession();
+            if (session != null && !session.HasSurveyCompleted)
+            {
+                session.RecordSurveySkipped("ui_trigger=unknown");
+                if (ConfigManager.telemetryEnabled.Value)
+                {
+                    TelemetryEventQueue.Enqueue(TelemetrySampleBuilder.BuildPostSessionSurveySkipped(session, session.SurveyComment));
+                }
+            }
+
+            if (session != null && !session.HasSessionEndQueued)
+            {
+                session.MarkSessionEndQueued();
+                TelemetryEventQueue.Enqueue(TelemetrySampleBuilder.BuildSessionEnd(session, "post_session_survey_skipped"));
+            }
+
+            CompletePendingSessionEndIfNeeded();
+            StartAnyFlushIfPossible();
+        }
+
+        public static void SkipPendingSurvey(string comment)
+        {
+            TelemetrySessionState session = GetSurveySession();
+            if (session != null && !session.HasSurveyCompleted)
+            {
+                session.RecordSurveySkipped(comment);
+                if (ConfigManager.telemetryEnabled.Value)
+                {
+                    TelemetryEventQueue.Enqueue(TelemetrySampleBuilder.BuildPostSessionSurveySkipped(session, session.SurveyComment));
+                }
+            }
+
+            if (session != null && !session.HasSessionEndQueued)
+            {
+                session.MarkSessionEndQueued();
+                TelemetryEventQueue.Enqueue(TelemetrySampleBuilder.BuildSessionEnd(session, "post_session_survey_skipped"));
+            }
+
             CompletePendingSessionEndIfNeeded();
             StartAnyFlushIfPossible();
         }
@@ -146,7 +192,11 @@ namespace GeneticsArtifact.Telemetry
             {
                 if (_session.HasSurvey)
                 {
-                    TelemetryEventQueue.Enqueue(TelemetrySampleBuilder.BuildSessionEnd(_session, "run_destroyed"));
+                    if (!_session.HasSessionEndQueued)
+                    {
+                        _session.MarkSessionEndQueued();
+                        TelemetryEventQueue.Enqueue(TelemetrySampleBuilder.BuildSessionEnd(_session, "run_destroyed"));
+                    }
                     if (GeneticsArtifactPlugin.Instance != null)
                     {
                         GeneticsArtifactPlugin.Instance.StartCoroutine(PostHogBatchClient.FlushQueuedEvents());
