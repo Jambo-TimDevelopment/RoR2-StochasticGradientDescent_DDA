@@ -47,6 +47,11 @@ def main() -> int:
         action="store_true",
         help="Also print sessions that look OK.",
     )
+    ap.add_argument(
+        "--show-comment",
+        action="store_true",
+        help="Print survey_comment (normalized) when available.",
+    )
     args = ap.parse_args()
 
     files: list[str] = []
@@ -58,6 +63,27 @@ def main() -> int:
     agg: dict[str, SessionAgg] = {}
     bad_lines = 0
 
+    def _normalize_mojibake(text: str) -> str:
+        """
+        Best-effort fix for common UTF-8-as-Latin1 mojibake (e.g. 'ÑÐµÑÑ' -> 'тест').
+        Safe to call on normal Unicode; it will typically return the input unchanged.
+        """
+        if not text:
+            return ""
+
+        # Quick heuristic: only try if the string contains typical mojibake markers.
+        # (This avoids accidentally transforming legitimate text.)
+        markers = ("Ã", "Ð", "Ñ", "Â", "â", "€", "™")
+        if not any(m in text for m in markers):
+            return text
+
+        # Try Latin-1 -> UTF-8 roundtrip.
+        try:
+            fixed = text.encode("latin-1", errors="strict").decode("utf-8", errors="strict")
+            return fixed
+        except Exception:
+            return text
+
     def _extract_ui_trigger(comment: str) -> str:
         if not comment:
             return ""
@@ -66,6 +92,14 @@ def main() -> int:
         if idx < 0:
             return ""
         return comment[idx + len(marker) :].strip()
+
+    def _ascii_escape(text: str) -> str:
+        if not text:
+            return ""
+        try:
+            return text.encode("unicode_escape", errors="backslashreplace").decode("ascii", errors="replace")
+        except Exception:
+            return text
 
     for path in files:
         if not os.path.exists(path):
@@ -102,7 +136,7 @@ def main() -> int:
                 except Exception:
                     pass
                 if not a.survey_comment and isinstance(props.get("survey_comment"), str):
-                    a.survey_comment = props.get("survey_comment") or ""
+                    a.survey_comment = _normalize_mojibake(props.get("survey_comment") or "")
                 if not a.ui_trigger:
                     a.ui_trigger = _extract_ui_trigger(a.survey_comment)
 
@@ -129,14 +163,14 @@ def main() -> int:
                 except Exception:
                     pass
                 if isinstance(props.get("survey_comment"), str):
-                    a.survey_comment = props.get("survey_comment") or a.survey_comment
+                    a.survey_comment = _normalize_mojibake(props.get("survey_comment") or "") or a.survey_comment
                 if not a.ui_trigger:
                     a.ui_trigger = _extract_ui_trigger(a.survey_comment)
 
             if event == "dda_post_session_survey_skipped" or event_kind == "post_session_survey_skipped":
                 a.has_survey_skipped = True
                 if isinstance(props.get("survey_comment"), str):
-                    a.survey_comment = props.get("survey_comment") or a.survey_comment
+                    a.survey_comment = _normalize_mojibake(props.get("survey_comment") or "") or a.survey_comment
                 if not a.ui_trigger:
                     a.ui_trigger = _extract_ui_trigger(a.survey_comment)
 
@@ -172,27 +206,31 @@ def main() -> int:
         for s in missing_survey:
             reason = s.end_reason or "?"
             trig = s.ui_trigger or "?"
-            print(f"- session_id={s.session_id} dda_mode={s.dda_mode or '?'} end_reason={reason} ui_trigger={trig} examples={s.examples}")
+            tail = f" comment_esc='{_ascii_escape(s.survey_comment)}'" if (args.show_comment and s.survey_comment) else ""
+            print(f"- session_id={s.session_id} dda_mode={s.dda_mode or '?'} end_reason={reason} ui_trigger={trig} examples={s.examples}{tail}")
 
     if invalid_survey:
         print("\n[INVALID survey] survey exists, but likert values missing/out of range:")
         for s in invalid_survey:
             trig = s.ui_trigger or "?"
-            print(f"- session_id={s.session_id} dda_mode={s.dda_mode or '?'} fairness={s.fairness} continuity={s.continuity} ui_trigger={trig} examples={s.examples}")
+            tail = f" comment_esc='{_ascii_escape(s.survey_comment)}'" if (args.show_comment and s.survey_comment) else ""
+            print(f"- session_id={s.session_id} dda_mode={s.dda_mode or '?'} fairness={s.fairness} continuity={s.continuity} ui_trigger={trig} examples={s.examples}{tail}")
 
     if missing_session_end:
         print("\n[MISSING session_end] survey/survey_skipped exists, but session_end not found:")
         for s in missing_session_end:
             tag = "survey" if s.has_survey else "skipped"
             trig = s.ui_trigger or "?"
-            print(f"- session_id={s.session_id} dda_mode={s.dda_mode or '?'} {tag} ui_trigger={trig} examples={s.examples}")
+            tail = f" comment_esc='{_ascii_escape(s.survey_comment)}'" if (args.show_comment and s.survey_comment) else ""
+            print(f"- session_id={s.session_id} dda_mode={s.dda_mode or '?'} {tag} ui_trigger={trig} examples={s.examples}{tail}")
 
     if args.show_ok and ok:
         print("\n[OK]")
         for s in ok:
             tag = "survey" if s.has_survey else "skipped"
             trig = s.ui_trigger or "?"
-            print(f"- session_id={s.session_id} dda_mode={s.dda_mode or '?'} {tag} fairness={s.fairness} continuity={s.continuity} ui_trigger={trig}")
+            tail = f" comment_esc='{_ascii_escape(s.survey_comment)}'" if (args.show_comment and s.survey_comment) else ""
+            print(f"- session_id={s.session_id} dda_mode={s.dda_mode or '?'} {tag} fairness={s.fairness} continuity={s.continuity} ui_trigger={trig}{tail}")
 
     # Non-zero exit if we found problems
     return 1 if missing_survey or invalid_survey else 0
