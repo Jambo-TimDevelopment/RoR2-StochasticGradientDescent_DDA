@@ -1,6 +1,10 @@
 using GeneticsArtifact.SgdEngine;
+using GeneticsArtifact.SgdEngine.Decision;
 using RoR2;
+using System;
 using System.Collections.Generic;
+using System.Reflection;
+using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -62,9 +66,15 @@ namespace GeneticsArtifact.Telemetry
             props["virtual_gap_abs"] = virtualGapAbs;
             props["delta_virtual_power"] = deltaVirtualPower;
             props["delta_virtual_challenge"] = deltaVirtualChallenge;
+            props["is_within_virtual_gap_epsilon"] = virtualGapAbs <= (ConfigManager.telemetryVirtualGapEpsilon?.Value ?? 0.50f);
+            props["is_within_stable_error_epsilon"] = meanAbsError <= (ConfigManager.telemetryStableErrorEpsilon?.Value ?? 0.10f);
             props["degradation_signal"] = degradationSignal;
             props["is_degraded"] = session.IsDegraded;
             props["recovery_elapsed_seconds"] = session.RecoveryElapsedSeconds;
+            props["current_degradation_trigger"] = session.CurrentDegradationTrigger;
+            props["current_degradation_trigger_value"] = session.CurrentDegradationTriggerValue;
+
+            AddPlayerBuildProperties(props, FindAnyPlayerBody());
 
             session.RecordSample(Mathf.Abs(hpError), Mathf.Abs(msError), Mathf.Abs(asError), Mathf.Abs(dmgError), virtualGapAbs, snapshot, sensors, dt);
             session.SetPreviousVirtuals(vp.Total, virtualChallenge);
@@ -81,10 +91,50 @@ namespace GeneticsArtifact.Telemetry
             return new TelemetryEvent("dda_recovery", props);
         }
 
-        public static TelemetryEvent BuildSessionEnd(TelemetrySessionState session)
+        public static TelemetryEvent BuildDegradationTransition(TelemetrySessionState session, TelemetryDegradationTransition transition)
+        {
+            var props = BuildCommonProperties(session);
+            props["event_kind"] = transition.EventKind;
+            props["transition_run_elapsed_seconds"] = transition.RunElapsedSeconds;
+            props["recovery_elapsed_seconds"] = transition.RecoveryElapsedSeconds;
+            props["degradation_trigger"] = transition.Trigger;
+            props["degradation_trigger_value"] = transition.TriggerValue;
+            props["degradation_signal"] = transition.DegradationSignal;
+            props["incoming_damage_norm01"] = transition.IncomingDamageNorm01;
+            props["deaths_per_window_norm01"] = transition.DeathsPerWindowNorm01;
+            props["low_health_uptime"] = transition.LowHealthUptime;
+            props["mean_abs_error_all_axes"] = transition.MeanAbsError;
+            return new TelemetryEvent(transition.EventKind == "degradation_start" ? "dda_degradation_start" : "dda_degradation_end", props);
+        }
+
+        public static TelemetryEvent BuildPlayerDeath(TelemetrySessionState session, CharacterBody body, DamageInfo damageInfo)
+        {
+            var props = BuildCommonProperties(session);
+            props["event_kind"] = "player_death";
+            props["player_deaths_count"] = session.PlayerDeathsCount;
+            props["death_body_name"] = body != null ? body.GetDisplayName() : "";
+            props["death_damage"] = damageInfo != null ? damageInfo.damage : 0f;
+            props["death_damage_type"] = damageInfo != null ? damageInfo.damageType.ToString() : "";
+            props["death_attacker_body"] = GetAttackerBodyName(damageInfo);
+            AddPlayerBuildProperties(props, body);
+            return new TelemetryEvent("dda_player_death", props);
+        }
+
+        public static TelemetryEvent BuildPostSessionSurvey(TelemetrySessionState session, int fairnessLikert, int continuityLikert, string comment)
+        {
+            var props = BuildCommonProperties(session);
+            props["event_kind"] = "post_session_survey";
+            props["fairness_likert_1_7"] = fairnessLikert;
+            props["continuity_likert_1_7"] = continuityLikert;
+            props["survey_comment"] = comment ?? "";
+            return new TelemetryEvent("dda_post_session_survey", props);
+        }
+
+        public static TelemetryEvent BuildSessionEnd(TelemetrySessionState session, string endReason)
         {
             var props = BuildCommonProperties(session);
             props["event_kind"] = "session_end";
+            props["end_reason"] = endReason ?? "run_destroyed";
             props["duration_seconds"] = session.ElapsedSeconds;
             props["samples_count"] = session.SamplesCount;
             props["mean_abs_error_max_health"] = session.MeanAbsErrorMaxHealth;
@@ -94,21 +144,34 @@ namespace GeneticsArtifact.Telemetry
             props["jump_rate_all_axes"] = session.JumpRateAllAxes;
             props["mean_virtual_gap_abs"] = session.MeanVirtualGapAbs;
             props["recovery_events_count"] = session.RecoveryEventsCount;
+            props["degradation_events_count"] = session.DegradationEventsCount;
             props["mean_recovery_seconds"] = session.MeanRecoverySeconds;
+            props["player_deaths_count"] = session.PlayerDeathsCount;
+            props["missed_sample_intervals"] = session.MissedSampleIntervals;
+            props["minimum_session_seconds"] = ConfigManager.telemetryMinimumSessionSeconds.Value;
+            props["is_quality_excluded_short_session"] = session.ElapsedSeconds < ConfigManager.telemetryMinimumSessionSeconds.Value;
+            props["fairness_likert_1_7"] = session.SurveyFairnessLikert;
+            props["continuity_likert_1_7"] = session.SurveyContinuityLikert;
+            props["survey_comment"] = session.SurveyComment;
             return new TelemetryEvent("dda_session_end", props);
         }
 
         private static Dictionary<string, object> BuildCommonProperties(TelemetrySessionState session)
         {
             var snapshot = TelemetryDifficultySnapshot.Capture();
-            return new Dictionary<string, object>
+            var props = new Dictionary<string, object>
             {
                 ["distinct_id"] = ConfigManager.telemetryAnonymousUserId.Value,
                 ["$process_person_profile"] = false,
                 ["session_id"] = session.SessionId,
+                ["participant_id"] = GetParticipantId(),
                 ["mod_version"] = GeneticsArtifactPlugin.ModVer,
-                ["telemetry_schema_version"] = 1,
+                ["telemetry_schema_version"] = 2,
                 ["experiment_id"] = ConfigManager.telemetryExperimentId.Value,
+                ["condition_order"] = ConfigManager.telemetryConditionOrder.Value,
+                ["run_attempt_index"] = ConfigManager.telemetryRunAttemptIndex.Value,
+                ["configured_run_seed"] = ConfigManager.telemetryConfiguredRunSeed.Value,
+                ["runtime_run_seed"] = GetRuntimeRunSeed(),
                 ["run_elapsed_seconds"] = session.ElapsedSeconds,
                 ["stage_name"] = Stage.instance?.sceneDef?.baseSceneName ?? "",
                 ["stage_index"] = Run.instance != null ? Run.instance.stageClearCount + 1 : 0,
@@ -116,8 +179,12 @@ namespace GeneticsArtifact.Telemetry
                 ["dda_mode"] = snapshot.Mode,
                 ["artifact_enabled"] = IsArtifactEnabled(),
                 ["is_network_server"] = NetworkServer.active,
-                ["queue_count"] = TelemetryEventQueue.Count
+                ["queue_count"] = TelemetryEventQueue.Count,
+                ["missed_sample_intervals"] = session.MissedSampleIntervals
             };
+
+            AddExperimentConfigProperties(props);
+            return props;
         }
 
         private static void AddSensorProperties(Dictionary<string, object> props, in SgdSensorsSample s)
@@ -154,6 +221,207 @@ namespace GeneticsArtifact.Telemetry
             props[prefix + "multiplier"] = multiplier;
             props[prefix + "delta_multiplier"] = multiplier - previousMultiplier;
             props[prefix + "is_jump"] = isJump;
+        }
+
+        private static void AddExperimentConfigProperties(Dictionary<string, object> props)
+        {
+            props["tau_jump"] = ConfigManager.telemetryJumpThreshold.Value;
+            props["epsilon_v"] = ConfigManager.telemetryVirtualGapEpsilon.Value;
+            props["epsilon_stable"] = ConfigManager.telemetryStableErrorEpsilon.Value;
+            props["degradation_threshold"] = ConfigManager.telemetryDegradationThreshold.Value;
+            props["recovery_threshold"] = ConfigManager.telemetryRecoveryThreshold.Value;
+            props["sample_interval_seconds"] = ConfigManager.telemetrySampleIntervalSeconds.Value;
+            props["minimum_session_seconds"] = ConfigManager.telemetryMinimumSessionSeconds.Value;
+
+            props["sgd_step_seconds"] = SgdDecisionRuntimeState.StepSeconds;
+            props["sgd_momentum"] = SgdDecisionDriver.DefaultMomentum;
+            props["sgd_gradient_clip"] = SgdDecisionDriver.DefaultGradientClip;
+            props["sgd_velocity_clip"] = SgdDecisionDriver.DefaultVelocityClip;
+            props["sgd_error_dead_zone"] = SgdDecisionDriver.DefaultErrorDeadZone;
+            props["sgd_hp_learning_rate"] = SgdDecisionDriver.HpLearningRate;
+            props["sgd_ms_learning_rate"] = SgdDecisionDriver.MsLearningRate;
+            props["sgd_as_learning_rate"] = SgdDecisionDriver.AsLearningRate;
+            props["sgd_dmg_learning_rate"] = SgdDecisionDriver.DmgLearningRate;
+            props["sgd_hp_max_delta_theta"] = SgdDecisionDriver.HpMaxDeltaTheta;
+            props["sgd_ms_max_delta_theta"] = SgdDecisionDriver.MsMaxDeltaTheta;
+            props["sgd_as_max_delta_theta"] = SgdDecisionDriver.AsMaxDeltaTheta;
+            props["sgd_dmg_max_delta_theta"] = SgdDecisionDriver.DmgMaxDeltaTheta;
+            props["sgd_hp_floor"] = ConfigManager.sgdHpFloor.Value;
+            props["sgd_hp_cap"] = ConfigManager.sgdHpCap.Value;
+            props["sgd_ms_floor"] = ConfigManager.sgdMsFloor.Value;
+            props["sgd_ms_cap"] = ConfigManager.sgdMsCap.Value;
+            props["sgd_as_floor"] = ConfigManager.sgdAsFloor.Value;
+            props["sgd_as_cap"] = ConfigManager.sgdAsCap.Value;
+            props["sgd_dmg_floor"] = ConfigManager.sgdDmgFloor.Value;
+            props["sgd_dmg_cap"] = ConfigManager.sgdDmgCap.Value;
+
+            props["ga_governor_type"] = ConfigManager.governorType.Value;
+            props["ga_time_limit_seconds"] = ConfigManager.timeLimit.Value;
+            props["ga_death_limit"] = ConfigManager.deathLimit.Value;
+            props["ga_gene_variance_limit"] = ConfigManager.geneVarianceLimit.Value;
+            props["ga_gene_cap"] = ConfigManager.geneCap.Value;
+            props["ga_gene_floor"] = ConfigManager.geneFloor.Value;
+            props["ga_gene_product_limit"] = ConfigManager.geneProductLimit.Value;
+        }
+
+        private static void AddPlayerBuildProperties(Dictionary<string, object> props, CharacterBody body)
+        {
+            if (body == null)
+            {
+                props["player_build_available"] = false;
+                return;
+            }
+
+            props["player_build_available"] = true;
+            props["player_body_name"] = body.GetDisplayName();
+            props["player_level"] = body.level;
+            props["player_damage"] = body.damage;
+            props["player_attack_speed"] = body.attackSpeed;
+            props["player_crit"] = body.crit;
+            props["player_max_health"] = body.maxHealth;
+            props["player_max_shield"] = body.maxShield;
+            props["player_regen"] = body.regen;
+            props["player_armor"] = body.armor;
+            props["player_move_speed"] = body.moveSpeed;
+
+            var raw = SgdVirtualPowerEstimator.ComputeRaw(body);
+            props["virtual_power_raw_offense"] = raw.Offense;
+            props["virtual_power_raw_defense"] = raw.Defense;
+            props["virtual_power_raw_mobility"] = raw.Mobility;
+            props["virtual_power_weight_offense"] = SgdVirtualPowerEstimator.WeightOffense;
+            props["virtual_power_weight_defense"] = SgdVirtualPowerEstimator.WeightDefense;
+            props["virtual_power_weight_mobility"] = SgdVirtualPowerEstimator.WeightMobility;
+            props["virtual_power_regen_weight"] = SgdVirtualPowerEstimator.RegenWeight;
+            props["player_unique_items"] = CountUniqueItems(body.inventory);
+            props["player_item_stacks_total"] = CountItemStacks(body.inventory);
+            props["player_items_compact"] = BuildItemSummary(body.inventory);
+        }
+
+        private static CharacterBody FindAnyPlayerBody()
+        {
+            foreach (var body in CharacterBody.readOnlyInstancesList)
+            {
+                if (body != null && body.isPlayerControlled)
+                {
+                    return body;
+                }
+            }
+
+            foreach (var body in CharacterBody.readOnlyInstancesList)
+            {
+                if (body != null && body.teamComponent != null && body.teamComponent.teamIndex == TeamIndex.Player)
+                {
+                    return body;
+                }
+            }
+
+            return null;
+        }
+
+        private static string GetParticipantId()
+        {
+            string participantId = ConfigManager.telemetryParticipantId?.Value;
+            return string.IsNullOrWhiteSpace(participantId)
+                ? ConfigManager.telemetryAnonymousUserId.Value
+                : participantId.Trim();
+        }
+
+        private static string GetRuntimeRunSeed()
+        {
+            var run = Run.instance;
+            if (run == null) return "";
+
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            var type = run.GetType();
+
+            var field = type.GetField("seed", flags) ?? type.GetField("runSeed", flags);
+            if (field != null)
+            {
+                object value = field.GetValue(run);
+                return value != null ? value.ToString() : "";
+            }
+
+            var property = type.GetProperty("seed", flags) ?? type.GetProperty("runSeed", flags);
+            if (property != null)
+            {
+                object value = property.GetValue(run, null);
+                return value != null ? value.ToString() : "";
+            }
+
+            return "";
+        }
+
+        private static string GetAttackerBodyName(DamageInfo damageInfo)
+        {
+            if (damageInfo?.attacker == null) return "";
+
+            var body = damageInfo.attacker.GetComponent<CharacterBody>();
+            return body != null ? body.GetDisplayName() : damageInfo.attacker.name;
+        }
+
+        private static int CountUniqueItems(Inventory inventory)
+        {
+            int unique = 0;
+            foreach (ItemIndex itemIndex in EnumerateAcquiredItems(inventory))
+            {
+                if (inventory.GetItemCount(itemIndex) > 0)
+                {
+                    unique++;
+                }
+            }
+
+            return unique;
+        }
+
+        private static int CountItemStacks(Inventory inventory)
+        {
+            int total = 0;
+            foreach (ItemIndex itemIndex in EnumerateAcquiredItems(inventory))
+            {
+                total += Mathf.Max(0, inventory.GetItemCount(itemIndex));
+            }
+
+            return total;
+        }
+
+        private static string BuildItemSummary(Inventory inventory)
+        {
+            if (inventory == null) return "";
+
+            var sb = new StringBuilder(256);
+            foreach (ItemIndex itemIndex in EnumerateAcquiredItems(inventory))
+            {
+                int count = inventory.GetItemCount(itemIndex);
+                if (count <= 0) continue;
+
+                if (sb.Length > 0) sb.Append("|");
+
+                var itemDef = ItemCatalog.GetItemDef(itemIndex);
+                string itemName = itemDef != null ? itemDef.name : itemIndex.ToString();
+                sb.Append(itemName.Replace("|", "_").Replace(":", "_"));
+                sb.Append(":");
+                sb.Append(count);
+            }
+
+            return sb.ToString();
+        }
+
+        private static IEnumerable<ItemIndex> EnumerateAcquiredItems(Inventory inventory)
+        {
+            if (inventory == null) yield break;
+
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            var field = typeof(Inventory).GetField("itemAcquisitionOrder", flags);
+            var acquiredItems = field?.GetValue(inventory) as System.Collections.IEnumerable;
+            if (acquiredItems == null) yield break;
+
+            foreach (object item in acquiredItems)
+            {
+                if (item is ItemIndex itemIndex)
+                {
+                    yield return itemIndex;
+                }
+            }
         }
 
         private static float EstimateAttackSpeedSkill01(in SgdSensorsSample s)

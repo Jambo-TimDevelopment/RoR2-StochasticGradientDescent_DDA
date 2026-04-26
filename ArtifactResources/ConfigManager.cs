@@ -6,6 +6,8 @@ namespace GeneticsArtifact
 {
     public class ConfigManager
     {
+        private static ConfigFile _configFile;
+
         public static ConfigEntry<int> timeLimit, deathLimit, governorType;
 
         public static ConfigEntry<float> geneVarianceLimit, geneCap, geneFloor, geneProductLimit;
@@ -26,16 +28,27 @@ namespace GeneticsArtifact
         // Research telemetry / PostHog ingestion.
         public static ConfigEntry<bool> telemetryEnabled;
         public static ConfigEntry<string> telemetryAnonymousUserId;
+        public static ConfigEntry<string> telemetryParticipantId;
         public static ConfigEntry<string> telemetryExperimentId;
+        public static ConfigEntry<string> telemetryConditionOrder;
+        public static ConfigEntry<int> telemetryRunAttemptIndex;
+        public static ConfigEntry<string> telemetryConfiguredRunSeed;
         public static ConfigEntry<float> telemetrySampleIntervalSeconds;
         public static ConfigEntry<float> telemetryFlushIntervalSeconds;
         public static ConfigEntry<int> telemetryMaxQueueSize;
         public static ConfigEntry<float> telemetryJumpThreshold;
+        public static ConfigEntry<float> telemetryVirtualGapEpsilon;
+        public static ConfigEntry<float> telemetryStableErrorEpsilon;
         public static ConfigEntry<float> telemetryDegradationThreshold;
         public static ConfigEntry<float> telemetryRecoveryThreshold;
+        public static ConfigEntry<float> telemetryMinimumSessionSeconds;
+        public static ConfigEntry<bool> researchAutoRotateDdaAlgorithms;
+        public static ConfigEntry<string> researchLastRunDdaAlgorithm;
 
         public static void Init(ConfigFile configFile)
         {
+            _configFile = configFile;
+
             governorType = configFile.Bind<int>(new ConfigDefinition("GeneEngineDriver Variables", "Learning Governor Type"), 0, new ConfigDescription("How the algorithm decides when to learn: 0 - Default, 1 - Time Only, 2 - Death Count Only", new AcceptableValueRange<int>(0, 2)));
             timeLimit = configFile.Bind<int>(new ConfigDefinition("GeneEngineDriver Variables", "Time Limit"), 60, new ConfigDescription("How many seconds between learnings:", new AcceptableValueRange<int>(5, 300))); // 5 seconds to 5 minutes
             deathLimit = configFile.Bind<int>(new ConfigDefinition("GeneEngineDriver Variables", "Death Limit"), 40, new ConfigDescription("How many monster deaths between learnings:", new AcceptableValueRange<int>(10, 100)));
@@ -121,10 +134,30 @@ namespace GeneticsArtifact
                 configFile.Save();
             }
 
+            telemetryParticipantId = configFile.Bind<string>(
+                new ConfigDefinition("Research Telemetry", "Participant Id"),
+                "",
+                new ConfigDescription("Explicit participant code for thesis experiments. Leave empty to reuse Anonymous User Id."));
+
             telemetryExperimentId = configFile.Bind<string>(
                 new ConfigDefinition("Research Telemetry", "Experiment Id"),
                 "thesis_v1",
                 new ConfigDescription("Experiment label used to segment telemetry in a single PostHog project."));
+
+            telemetryConditionOrder = configFile.Bind<string>(
+                new ConfigDefinition("Research Telemetry", "Condition Order"),
+                "FLS,GA,SGD",
+                new ConfigDescription("Planned condition order for the current participant, e.g. FLS,GA,SGD."));
+
+            telemetryRunAttemptIndex = configFile.Bind<int>(
+                new ConfigDefinition("Research Telemetry", "Run Attempt Index"),
+                1,
+                new ConfigDescription("Explicit attempt number within the current participant/condition.", new AcceptableValueRange<int>(1, 1000)));
+
+            telemetryConfiguredRunSeed = configFile.Bind<string>(
+                new ConfigDefinition("Research Telemetry", "Configured Run Seed"),
+                "",
+                new ConfigDescription("Optional planned run seed or scenario label. Runtime seed is logged separately when available."));
 
             telemetrySampleIntervalSeconds = configFile.Bind<float>(
                 new ConfigDefinition("Research Telemetry", "Sample Interval Seconds"),
@@ -146,6 +179,16 @@ namespace GeneticsArtifact
                 0.10f,
                 new ConfigDescription("Absolute multiplier delta treated as a sharp difficulty jump.", new AcceptableValueRange<float>(0.01f, 1f)));
 
+            telemetryVirtualGapEpsilon = configFile.Bind<float>(
+                new ConfigDefinition("Research Telemetry", "Virtual Gap Epsilon"),
+                0.50f,
+                new ConfigDescription("Acceptance threshold epsilon_v for |V_c - V_p| in H3.", new AcceptableValueRange<float>(0.01f, 10f)));
+
+            telemetryStableErrorEpsilon = configFile.Bind<float>(
+                new ConfigDefinition("Research Telemetry", "Stable Error Epsilon"),
+                0.10f,
+                new ConfigDescription("Stable corridor epsilon_stable for mean alignment error in H4.", new AcceptableValueRange<float>(0.01f, 1f)));
+
             telemetryDegradationThreshold = configFile.Bind<float>(
                 new ConfigDefinition("Research Telemetry", "Degradation Threshold"),
                 0.70f,
@@ -155,6 +198,28 @@ namespace GeneticsArtifact
                 new ConfigDefinition("Research Telemetry", "Recovery Threshold"),
                 0.35f,
                 new ConfigDescription("Stress signal threshold that ends a degradation episode.", new AcceptableValueRange<float>(0f, 0.9f)));
+
+            telemetryMinimumSessionSeconds = configFile.Bind<float>(
+                new ConfigDefinition("Research Telemetry", "Minimum Session Seconds"),
+                300f,
+                new ConfigDescription("Sessions shorter than this are marked as quality-excluded in telemetry.", new AcceptableValueRange<float>(0f, 7200f)));
+
+            researchAutoRotateDdaAlgorithms = configFile.Bind<bool>(
+                new ConfigDefinition("Research DDA Rotation", "Auto Rotate Algorithms"),
+                true,
+                new ConfigDescription("Automatically rotate hidden DDA mode on each new run: FLS -> GA -> SGD -> FLS."));
+
+            researchLastRunDdaAlgorithm = configFile.Bind<string>(
+                new ConfigDefinition("Research DDA Rotation", "Last Run Algorithm"),
+                "None",
+                new ConfigDescription(
+                    "Last hidden DDA algorithm launched by the research rotator. Do not edit during experiments unless you want to reset the sequence.",
+                    new AcceptableValueList<string>("None", "FLS", "GA", "SGD")));
+        }
+
+        public static void Save()
+        {
+            _configFile?.Save();
         }
     }
 

@@ -83,6 +83,40 @@ for %%F in ("%DST1%" "%DST2%") do (
 )
 
 echo.
+echo === Disable duplicate GeneticsArtifact.dll copies in this profile ===
+echo.
+
+REM We keep only DST1 and DST2 as the active copies in this profile.
+REM Any other GeneticsArtifact.dll found under plugins will be renamed to GeneticsArtifact.dll.disabled
+REM to prevent BepInEx from loading duplicates and printing "Skipping ... because a newer version exists".
+
+set "DUP_DISABLED=0"
+pushd "%PLUGINS_DIR%" >NUL 2>&1
+if errorlevel 1 (
+  echo [WARN] Could not access plugins directory for cleanup: "%PLUGINS_DIR%"
+  goto :after_cleanup
+)
+
+for /R "%PLUGINS_DIR%" %%D in (GeneticsArtifact.dll) do (
+  set "CAND=%%~fD"
+  if /I not "!CAND!"=="%DST1%" if /I not "!CAND!"=="%DST2%" (
+    REM Rename (do not delete) so it can be restored manually if needed.
+    ren "%%~fD" "GeneticsArtifact.dll.disabled" >NUL 2>&1
+    if not errorlevel 1 (
+      set /A DUP_DISABLED+=1
+      echo [OK] Disabled duplicate: "!CAND!"
+    ) else (
+      echo [WARN] Could not disable: "!CAND!"
+    )
+  )
+)
+
+popd >NUL 2>&1
+echo [INFO] Disabled duplicates: %DUP_DISABLED%
+
+:after_cleanup
+
+echo.
 echo === Launch Thunderstore Mod Manager ===
 echo.
 

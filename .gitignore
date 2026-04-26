@@ -344,3 +344,6 @@ healthchecksdb
 
 # Local secrets (do not commit)
 TelemetrySecrets.props
+
+# Local telemetry exports (do not commit)
+tools/posthog_exports/

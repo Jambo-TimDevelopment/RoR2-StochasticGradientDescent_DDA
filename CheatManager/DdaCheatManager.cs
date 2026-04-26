@@ -4,6 +4,7 @@ using System;
 using System.Globalization;
 using GeneticsArtifact.SgdEngine.Decision;
 using GeneticsArtifact.SgdEngine.Actuators;
+using GeneticsArtifact.Telemetry;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -28,40 +29,48 @@ namespace GeneticsArtifact.CheatManager
             {
                 if (int.TryParse(args[0], out int value))
                 {
-                    DdaAlgorithmState.IsGeneticAlgorithmEnabled = value != 0;
+                    if (value != 0)
+                    {
+                        DdaAlgorithmState.Activate(DdaAlgorithmType.Genetic);
+                    }
+                    else
+                    {
+                        DdaAlgorithmState.Activate(DdaAlgorithmType.Fixed);
+                    }
                 }
             }
             else
             {
-                DdaAlgorithmState.IsGeneticAlgorithmEnabled = !DdaAlgorithmState.IsGeneticAlgorithmEnabled;
+                DdaAlgorithmState.Activate(DdaAlgorithmState.ShouldRunGeneticEngine() ? DdaAlgorithmType.Fixed : DdaAlgorithmType.Genetic);
             }
 
             Debug.Log($"[DDA] Genetic algorithm: {(DdaAlgorithmState.IsGeneticAlgorithmEnabled ? "ENABLED" : "DISABLED")}");
         }
 
-        [ConCommand(commandName = "dda_algorithm", helpText = "Switch DDA algorithm. Usage: dda_algorithm [genetic|sgd]")]
+        [ConCommand(commandName = "dda_algorithm", helpText = "Switch DDA algorithm. Usage: dda_algorithm [fixed|genetic|sgd]")]
         private static void OnAlgorithmSwitch(ConCommandArgs args)
         {
             if (args.Count > 0)
             {
                 string arg = args[0].ToLowerInvariant();
-                if (arg == "genetic")
+                if (arg == "fixed" || arg == "fls")
                 {
-                    DdaAlgorithmState.ActiveAlgorithm = DdaAlgorithmType.Genetic;
+                    DdaAlgorithmState.Activate(DdaAlgorithmType.Fixed);
+                    Debug.Log("[DDA] Algorithm set to: Fixed difficulty");
+                }
+                else if (arg == "genetic" || arg == "ga")
+                {
+                    DdaAlgorithmState.Activate(DdaAlgorithmType.Genetic);
                     Debug.Log("[DDA] Algorithm set to: Genetic");
                 }
                 else if (arg == "sgd")
                 {
-                    DdaAlgorithmState.ActiveAlgorithm = DdaAlgorithmType.Sgd;
-
-                    // Avoid interference: the genetic engine does not check ActiveAlgorithm and will run if enabled.
-                    DdaAlgorithmState.IsGeneticAlgorithmEnabled = false;
-
-                    Debug.Log("[DDA] Algorithm set to: SGD (genetic engine disabled to avoid interference)");
+                    DdaAlgorithmState.Activate(DdaAlgorithmType.Sgd);
+                    Debug.Log("[DDA] Algorithm set to: SGD");
                 }
                 else
                 {
-                    Debug.Log("[DDA] Unknown algorithm. Use: genetic, sgd");
+                    Debug.Log("[DDA] Unknown algorithm. Use: fixed, genetic, sgd");
                 }
             }
             else
@@ -95,6 +104,41 @@ namespace GeneticsArtifact.CheatManager
             Debug.Log("[DDA] dda_param: Not yet implemented. Use config file for now.");
         }
 
+        [ConCommand(commandName = "dda_survey", helpText = "Send post-session Likert survey for H5-H6. Usage: dda_survey <fairness 1-7> <continuity 1-7> [comment]")]
+        private static void OnPostSessionSurveyCommand(ConCommandArgs args)
+        {
+            if (args.Count < 2 ||
+                !int.TryParse(args[0], out int fairnessLikert) ||
+                !int.TryParse(args[1], out int continuityLikert))
+            {
+                Debug.Log("[DDA] Usage: dda_survey <fairness 1-7> <continuity 1-7> [comment]");
+                return;
+            }
+
+            fairnessLikert = Mathf.Clamp(fairnessLikert, 1, 7);
+            continuityLikert = Mathf.Clamp(continuityLikert, 1, 7);
+
+            string comment = "";
+            if (args.Count > 2)
+            {
+                string[] parts = new string[args.Count - 2];
+                for (int i = 2; i < args.Count; i++)
+                {
+                    parts[i - 2] = args[i];
+                }
+
+                comment = string.Join(" ", parts);
+            }
+
+            if (!TelemetryRuntimeDriver.RecordPostSessionSurvey(fairnessLikert, continuityLikert, comment))
+            {
+                Debug.Log("[DDA] Survey was not sent: no active telemetry session.");
+                return;
+            }
+
+            Debug.Log($"[DDA] Survey sent: fairness={fairnessLikert}, continuity={continuityLikert}");
+        }
+
         [ConCommand(commandName = "dda_sgd_step_time", helpText = "Set SGD gradient step time (seconds). Counts only combat time. Usage: dda_sgd_step_time [seconds]")]
         private static void OnSgdStepTimeCommand(ConCommandArgs args)
         {
@@ -111,7 +155,7 @@ namespace GeneticsArtifact.CheatManager
             }
 
             // Convenience: step configuration implies we want SGD active.
-            DdaAlgorithmState.ActiveAlgorithm = DdaAlgorithmType.Sgd;
+            DdaAlgorithmState.Activate(DdaAlgorithmType.Sgd);
             SgdDecisionRuntimeState.SetStepSeconds(seconds);
 
             Debug.Log($"[DDA] SGD step time set to: {SgdDecisionRuntimeState.StepSeconds:F1}s (combat time only)");
@@ -144,7 +188,7 @@ namespace GeneticsArtifact.CheatManager
             }
 
             // Convenience: axis configuration implies we want SGD active.
-            DdaAlgorithmState.ActiveAlgorithm = DdaAlgorithmType.Sgd;
+            DdaAlgorithmState.Activate(DdaAlgorithmType.Sgd);
             setValue(enabled);
 
             Debug.Log($"[DDA] SGD axis {axisDisplayName} adaptation: {(enabled ? "ENABLED" : "DISABLED")}");
@@ -270,7 +314,7 @@ namespace GeneticsArtifact.CheatManager
             }
 
             // Convenience: these commands imply we want SGD behavior active.
-            DdaAlgorithmState.ActiveAlgorithm = DdaAlgorithmType.Sgd;
+            DdaAlgorithmState.Activate(DdaAlgorithmType.Sgd);
             setValue(mult);
 
             float clamped = getValue();

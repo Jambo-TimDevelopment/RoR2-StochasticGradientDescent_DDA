@@ -20,8 +20,19 @@ namespace GeneticsArtifact.CheatManager
         /// </summary>
         public static bool IsDebugOverlayEnabled { get; set; }
 
+        public static void Activate(DdaAlgorithmType algorithm)
+        {
+            ActiveAlgorithm = algorithm;
+            IsGeneticAlgorithmEnabled = algorithm == DdaAlgorithmType.Genetic;
+        }
+
         public static string GetTelemetryMode()
         {
+            if (ActiveAlgorithm == DdaAlgorithmType.Fixed)
+            {
+                return "FLS";
+            }
+
             if (ActiveAlgorithm == DdaAlgorithmType.Sgd)
             {
                 return "SGD";
@@ -32,12 +43,18 @@ namespace GeneticsArtifact.CheatManager
                 return "GA";
             }
 
-            return "FixedDisabled";
+            return "FLS";
+        }
+
+        public static bool ShouldRunGeneticEngine()
+        {
+            return ActiveAlgorithm == DdaAlgorithmType.Genetic && IsGeneticAlgorithmEnabled;
         }
     }
 
     public enum DdaAlgorithmType
     {
+        Fixed,
         Genetic,
         Sgd
     }

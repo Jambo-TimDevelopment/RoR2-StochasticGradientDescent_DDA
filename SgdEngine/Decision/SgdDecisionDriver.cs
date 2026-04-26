@@ -14,24 +14,24 @@ namespace GeneticsArtifact.SgdEngine.Decision
     public static class SgdDecisionDriver
     {
         // --- Hyperparameters ---
-        private const float DefaultMomentum = 0.65f;
-        private const float DefaultGradientClip = 0.50f;
-        private const float DefaultVelocityClip = 1.00f;
-        private const float DefaultErrorDeadZone = 0.03f;
+        internal const float DefaultMomentum = 0.65f;
+        internal const float DefaultGradientClip = 0.50f;
+        internal const float DefaultVelocityClip = 1.00f;
+        internal const float DefaultErrorDeadZone = 0.03f;
         private const float ExternalSyncEpsilon = 0.001f;
 
         // Per-axis learning rates and step caps.
-        private const float HpLearningRate = 0.22f;
-        private const float HpMaxDeltaTheta = 0.060f; // ~6.2% multiplier step max
+        internal const float HpLearningRate = 0.22f;
+        internal const float HpMaxDeltaTheta = 0.060f; // ~6.2% multiplier step max
 
-        private const float MsLearningRate = 0.20f;
-        private const float MsMaxDeltaTheta = 0.050f; // ~5.1% multiplier step max
+        internal const float MsLearningRate = 0.20f;
+        internal const float MsMaxDeltaTheta = 0.050f; // ~5.1% multiplier step max
 
-        private const float AsLearningRate = 0.25f;
-        private const float AsMaxDeltaTheta = 0.075f; // ~7.8% multiplier step max
+        internal const float AsLearningRate = 0.25f;
+        internal const float AsMaxDeltaTheta = 0.075f; // ~7.8% multiplier step max
 
-        private const float DmgLearningRate = 0.18f;
-        private const float DmgMaxDeltaTheta = 0.050f; // ~5.1% multiplier step max
+        internal const float DmgLearningRate = 0.18f;
+        internal const float DmgMaxDeltaTheta = 0.050f; // ~5.1% multiplier step max
 
         private const float AxisApplyEpsilon = 0.0005f;
 

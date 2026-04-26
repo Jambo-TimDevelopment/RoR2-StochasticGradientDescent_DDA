@@ -27,7 +27,7 @@ namespace GeneticsArtifact
         private static void Run_Start(On.RoR2.Run.orig_Start orig, Run self)
         {
             orig(self);
-            if (NetworkServer.active && DdaAlgorithmState.IsGeneticAlgorithmEnabled && RunArtifactManager.instance.IsArtifactEnabled(ArtifactOfGenetics.artifactDef))
+            if (NetworkServer.active && DdaAlgorithmState.ShouldRunGeneticEngine())
             {
                 self.gameObject.AddComponent<GeneEngineDriver>();
             }
@@ -36,8 +36,7 @@ namespace GeneticsArtifact
         private static void CharacterBody_Start(On.RoR2.CharacterBody.orig_Start orig, CharacterBody self)
         {
             orig(self);
-            if (NetworkServer.active && DdaAlgorithmState.IsGeneticAlgorithmEnabled &&
-               (RunArtifactManager.instance.IsArtifactEnabled(ArtifactOfGenetics.artifactDef) || ConfigManager.maintainIfDisabled.Value))
+            if (NetworkServer.active && DdaAlgorithmState.ShouldRunGeneticEngine())
             {
                 if (instance == null) //Emergency Catch for Bulwark Edge Case
                 {
@@ -57,7 +56,8 @@ namespace GeneticsArtifact
                     }
 
                     MonsterGeneBehaviour geneBehaviour = self.gameObject.AddComponent<MonsterGeneBehaviour>();
-                    if (RunArtifactManager.instance.IsArtifactEnabled(ArtifactOfGenetics.artifactDef))
+                    if ((RunArtifactManager.instance != null && RunArtifactManager.instance.IsArtifactEnabled(ArtifactOfGenetics.artifactDef)) ||
+                        ConfigManager.researchAutoRotateDdaAlgorithms.Value)
                     {
                         geneBehaviour.MutateFromMaster();
                         geneBehaviour.characterBody.RecalculateStats(); // Single explicit call to make sure
@@ -73,7 +73,7 @@ namespace GeneticsArtifact
         private static void HealthComponent_TakeDamage(On.RoR2.HealthComponent.orig_TakeDamage orig, HealthComponent self, DamageInfo damageInfo)
         {
             orig(self, damageInfo);
-            if (NetworkServer.active && DdaAlgorithmState.IsGeneticAlgorithmEnabled && RunArtifactManager.instance.IsArtifactEnabled(ArtifactOfGenetics.artifactDef))
+            if (NetworkServer.active && DdaAlgorithmState.ShouldRunGeneticEngine())
             {
                 if (damageInfo.attacker is GameObject attackerObject)
                 {

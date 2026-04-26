@@ -25,7 +25,7 @@ namespace GeneticsArtifact
     [NetworkCompatibility(CompatibilityLevel.EveryoneMustHaveMod, VersionStrictness.EveryoneNeedSameModVersion)]
     public class GeneticsArtifactPlugin : BaseUnityPlugin
     {
-        public const string ModVer = "4.5.3";
+        public const string ModVer = "4.5.4";
         public const string ModName = "Genetics";
         public const string ModGuid = "com.RicoValdezio.ArtifactOfGenetics";
         public static GeneticsArtifactPlugin Instance;
@@ -48,6 +48,7 @@ namespace GeneticsArtifact
             SgdRuntimeDriver.RegisterHooks();
             SgdActuatorsHooks.RegisterHooks();
             TelemetryRuntimeDriver.RegisterHooks();
+            DdaRunModeRotator.RegisterHooks();
 
             foreach (PluginInfo plugin in Chainloader.PluginInfos.Values) { if (plugin.Metadata.GUID.Equals("com.rune580.riskofoptions")) { RiskOfOptionsCompat.Init(); break; } }
         }
