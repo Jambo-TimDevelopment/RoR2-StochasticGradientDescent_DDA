@@ -1,5 +1,6 @@
 using RoR2;
 using UnityEngine;
+using GeneticsArtifact.Telemetry;
 
 namespace GeneticsArtifact.SgdEngine
 {
@@ -82,6 +83,7 @@ namespace GeneticsArtifact.SgdEngine
                     {
                         // Player body destroyed. This is a proxy for "death" (may include some edge cases).
                         _estimator.ObservePlayerDeath();
+                        TelemetryRuntimeDriver.NotifyPlayerBodyDestroyed(self);
                     }
                     else if (self.teamComponent != null && self.teamComponent.teamIndex == TeamIndex.Monster)
                     {

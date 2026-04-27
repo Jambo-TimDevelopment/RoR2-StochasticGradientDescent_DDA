@@ -1,5 +1,8 @@
 using RoR2;
 using UnityEngine;
+using GeneticsArtifact.DdaDebug;
+using RoR2.UI;
+using UnityEngine.EventSystems;
 
 namespace GeneticsArtifact.Telemetry
 {
@@ -18,10 +21,66 @@ namespace GeneticsArtifact.Telemetry
 
         public static void RegisterHooks()
         {
-            On.RoR2.Run.Start += Run_Start;
-            On.RoR2.Run.BeginGameOver += Run_BeginGameOver;
-            On.RoR2.HealthComponent.TakeDamage += HealthComponent_TakeDamage;
-            TelemetrySurveyWidget.EnsureAttached();
+            // IMPORTANT:
+            // When SGD hooks are enabled, they already detour Run.Start and CharacterBody.OnDestroy.
+            // Detouring the same methods from multiple subsystems has been observed to destabilize
+            // repeat-run lobby startup (InvalidCastException in PauseStopController.Awake).
+            //
+            // So:
+            // - Telemetry-only mode: we hook Run.Start and CharacterBody.OnDestroy ourselves.
+            // - Telemetry+SGD mode: we DO NOT hook those methods; TelemetryRuntimeDriver is attached
+            //   by SgdRuntimeDriver.Run_Start and player deaths are forwarded from SGD sensors.
+            bool sgdHooksEnabled = ConfigManager.diagnosticsEnableSgdHooks != null && ConfigManager.diagnosticsEnableSgdHooks.Value;
+            if (!sgdHooksEnabled)
+            {
+                On.RoR2.Run.BeginGameOver += Run_BeginGameOver;
+                On.RoR2.Run.Start += Run_Start;
+                On.RoR2.CharacterBody.OnDestroy += CharacterBody_OnDestroy;
+            }
+            // Keep the survey widget lazy-attached (TelemetrySurveyWidget.Show calls EnsureAttached).
+            // Avoid creating persistent UI components on startup to reduce risk of repeat-run instability.
+
+            On.RoR2.UI.MainMenu.BaseMainMenuScreen.OnEnter += BaseMainMenuScreen_OnEnter;
+        }
+
+        internal static void NotifyRunBeginGameOver(GameEndingDef gameEndingDef)
+        {
+            // #region agent log
+            DdaDebugLog.Write(
+                "H2",
+                "TelemetryRuntimeDriver.cs:NotifyRunBeginGameOver",
+                "Telemetry notified about BeginGameOver",
+                data: gameEndingDef != null ? ("ending=" + gameEndingDef.cachedName + "; isWin=" + gameEndingDef.isWin) : "ending=null");
+            // #endregion
+
+            RequestSurvey(gameEndingDef != null && gameEndingDef.isWin ? "victory" : "game_over");
+        }
+
+        internal static void NotifyPlayerBodyDestroyed(CharacterBody body)
+        {
+            if (_activeDriver == null ||
+                !ConfigManager.telemetryEnabled.Value ||
+                body == null)
+            {
+                return;
+            }
+
+            if (!IsPlayerBody(body))
+            {
+                return;
+            }
+
+            // Collapse duplicates (scene transitions / multiple destroys).
+            if (Time.time - _activeDriver._lastPlayerDeathAt < 1f)
+            {
+                return;
+            }
+
+            _activeDriver._lastPlayerDeathAt = Time.time;
+            _activeDriver._session.RecordPlayerDeath();
+            TelemetryEventQueue.Enqueue(TelemetrySampleBuilder.BuildPlayerDeath(_activeDriver._session, body, null));
+            RequestSurvey("player_death");
+            _activeDriver.StartFlushIfIdle();
         }
 
         public static bool HasActiveSession =>
@@ -131,6 +190,136 @@ namespace GeneticsArtifact.Telemetry
             orig(self, gameEndingDef);
         }
 
+        private static void BaseMainMenuScreen_OnEnter(
+            On.RoR2.UI.MainMenu.BaseMainMenuScreen.orig_OnEnter orig,
+            RoR2.UI.MainMenu.BaseMainMenuScreen self,
+            RoR2.UI.MainMenu.MainMenuController mainMenuController)
+        {
+            orig(self, mainMenuController);
+
+            EnsureMpEventSystemForMainMenu();
+
+            // Force cursor usable in main menu. Some subsystems (and the game itself) can leave the
+            // cursor hidden/locked after returning from a run, which blocks starting a new run.
+            Cursor.visible = true;
+            Cursor.lockState = CursorLockMode.None;
+
+            // #region agent log
+            DdaDebugLog.Write(
+                "H6",
+                "TelemetryRuntimeDriver.cs:BaseMainMenuScreen_OnEnter",
+                "Main menu entered",
+                data: "pendingSurveySession=" + (_pendingSurveySession != null && !string.IsNullOrEmpty(_pendingSurveySession.SessionId)) +
+                      "; hasSubmitted=" + HasSubmittedSurvey +
+                      "; hasActiveSession=" + HasActiveSession +
+                      "; cursorVisible=" + Cursor.visible +
+                      "; cursorLock=" + Cursor.lockState +
+                      "; " + DdaDebugLog.DumpEventSystems());
+            // #endregion
+
+            TryShowPendingSurveyFromMainMenu();
+        }
+
+        private static void EnsureMpEventSystemForMainMenu()
+        {
+            try
+            {
+                MPEventSystem[] mp = UnityEngine.Object.FindObjectsOfType<MPEventSystem>();
+                EventSystem[] es = UnityEngine.Object.FindObjectsOfType<EventSystem>();
+
+                // Pick Player0 when available, otherwise first enabled/first found.
+                MPEventSystem chosen = null;
+                if (mp != null)
+                {
+                    foreach (MPEventSystem item in mp)
+                    {
+                        if (item != null && item.name == "MPEventSystem Player0")
+                        {
+                            chosen = item;
+                            break;
+                        }
+                    }
+                    if (chosen == null)
+                    {
+                        foreach (MPEventSystem item in mp)
+                        {
+                            if (item != null && item.enabled)
+                            {
+                                chosen = item;
+                                break;
+                            }
+                        }
+                    }
+                    if (chosen == null && mp.Length > 0) chosen = mp[0];
+                }
+
+                // #region agent log
+                DdaDebugLog.Write(
+                    "H9",
+                    "TelemetryRuntimeDriver.cs:EnsureMpEventSystemForMainMenu:pre",
+                    "Ensure MPEventSystem for main menu",
+                    data: "chosen=" + (chosen != null ? chosen.name : "null") + "; " + DdaDebugLog.DumpEventSystems());
+                // #endregion
+
+                if (chosen != null && !chosen.enabled)
+                {
+                    chosen.enabled = true;
+                }
+
+                // If a plain Unity EventSystem is enabled alongside MPEventSystem, RoR2 cursor/UI can break.
+                // Disable plain EventSystem instances if we have an MPEventSystem.
+                if (chosen != null && es != null)
+                {
+                    foreach (EventSystem item in es)
+                    {
+                        if (item == null) continue;
+                        if (item is MPEventSystem) continue;
+                        if (item.enabled)
+                        {
+                            item.enabled = false;
+                        }
+                    }
+                }
+
+                // #region agent log
+                DdaDebugLog.Write(
+                    "H9",
+                    "TelemetryRuntimeDriver.cs:EnsureMpEventSystemForMainMenu:post",
+                    "Ensure MPEventSystem done",
+                    data: DdaDebugLog.DumpEventSystems());
+                // #endregion
+            }
+            catch (System.Exception ex)
+            {
+                // #region agent log
+                DdaDebugLog.Write("H9", "TelemetryRuntimeDriver.cs:EnsureMpEventSystemForMainMenu:catch", "Ensure MPEventSystem failed", data: ex.GetType().Name + ": " + ex.Message);
+                // #endregion
+            }
+        }
+
+        private static void TryShowPendingSurveyFromMainMenu()
+        {
+            if (!ConfigManager.telemetryEnabled.Value || _pendingSurveySession == null)
+            {
+                return;
+            }
+
+            if (_pendingSurveySession.HasSurveyCompleted)
+            {
+                return;
+            }
+
+            // #region agent log
+            DdaDebugLog.Write(
+                "H6",
+                "TelemetryRuntimeDriver.cs:TryShowPendingSurveyFromMainMenu",
+                "Showing pending survey from main menu",
+                data: "pendingReason=" + _pendingSurveyEndReason + "; sessionId=" + _pendingSurveySession.SessionId);
+            // #endregion
+
+            RequestSurvey("pending_survey_main_menu");
+        }
+
         private void Awake()
         {
             _activeDriver = this;
@@ -138,6 +327,10 @@ namespace GeneticsArtifact.Telemetry
             _sampleTimer = 0f;
             _flushTimer = 0f;
             _lastPlayerDeathAt = -1000f;
+
+            // #region agent log
+            DdaDebugLog.Write("H2", "TelemetryRuntimeDriver.cs:Awake", "TelemetryRuntimeDriver Awake");
+            // #endregion
 
             if (ConfigManager.telemetryEnabled.Value)
             {
@@ -188,8 +381,26 @@ namespace GeneticsArtifact.Telemetry
 
         private void OnDestroy()
         {
+            // #region agent log
+            DdaDebugLog.Write(
+                "H2",
+                "TelemetryRuntimeDriver.cs:OnDestroy",
+                "TelemetryRuntimeDriver OnDestroy",
+                data: "sessionId=" + _session.SessionId + "; pendingEndQueued=" + _session.HasSessionEndQueued);
+            // #endregion
+
             if (ConfigManager.telemetryEnabled.Value && !string.IsNullOrEmpty(_session.SessionId))
             {
+                // #region agent log
+                DdaDebugLog.Write(
+                    "H5",
+                    "TelemetryRuntimeDriver.cs:OnDestroy:branch",
+                    "TelemetryRuntimeDriver OnDestroy branch",
+                    data: "hasSurvey=" + _session.HasSurvey +
+                          "; hasSessionEndQueued=" + _session.HasSessionEndQueued +
+                          "; pluginInstance=" + (GeneticsArtifactPlugin.Instance != null));
+                // #endregion
+
                 if (_session.HasSurvey)
                 {
                     if (!_session.HasSessionEndQueued)
@@ -199,6 +410,9 @@ namespace GeneticsArtifact.Telemetry
                     }
                     if (GeneticsArtifactPlugin.Instance != null)
                     {
+                        // #region agent log
+                        DdaDebugLog.Write("H5", "TelemetryRuntimeDriver.cs:OnDestroy:flush", "Starting FlushQueuedEvents coroutine (hasSurvey)");
+                        // #endregion
                         GeneticsArtifactPlugin.Instance.StartCoroutine(PostHogBatchClient.FlushQueuedEvents());
                     }
                 }
@@ -207,7 +421,12 @@ namespace GeneticsArtifact.Telemetry
                     _pendingSurveySession = _session;
                     _pendingSurveyEndReason = "run_destroyed";
                     _pendingSessionEndQueued = false;
-                    RequestSurvey("run_destroyed");
+                    // #region agent log
+                    DdaDebugLog.Write("H5", "TelemetryRuntimeDriver.cs:OnDestroy:requestSurvey", "RequestSurvey(run_destroyed) from OnDestroy");
+                    // #endregion
+                    // Do NOT show the survey UI during Run teardown. It can happen while UI/EventSystem
+                    // is being rebuilt, and has been correlated with repeat-run lobby instability.
+                    // The pending survey will be shown on main menu enter.
                 }
             }
 
@@ -217,40 +436,34 @@ namespace GeneticsArtifact.Telemetry
             }
         }
 
-        private static void HealthComponent_TakeDamage(On.RoR2.HealthComponent.orig_TakeDamage orig, HealthComponent self, DamageInfo damageInfo)
+        private static void CharacterBody_OnDestroy(On.RoR2.CharacterBody.orig_OnDestroy orig, CharacterBody self)
         {
-            orig(self, damageInfo);
-
-            if (_activeDriver == null ||
-                !ConfigManager.telemetryEnabled.Value ||
-                self == null ||
-                damageInfo == null)
+            try
             {
-                return;
-            }
+                if (_activeDriver == null ||
+                    !ConfigManager.telemetryEnabled.Value ||
+                    self == null)
+                {
+                    return;
+                }
 
-            CharacterBody victimBody = self.body;
-            if (!IsPlayerBody(victimBody))
+                if (!IsPlayerBody(self))
+                {
+                    return;
+                }
+
+                // OnDestroy can be invoked during scene transitions; collapse duplicates.
+                if (Time.time - _activeDriver._lastPlayerDeathAt < 1f)
+                {
+                    return;
+                }
+
+                NotifyPlayerBodyDestroyed(self);
+            }
+            finally
             {
-                return;
+                orig(self);
             }
-
-            if (self.alive || self.health > 0f)
-            {
-                return;
-            }
-
-            // TakeDamage can be invoked multiple times around lethal damage; collapse duplicates.
-            if (Time.time - _activeDriver._lastPlayerDeathAt < 1f)
-            {
-                return;
-            }
-
-            _activeDriver._lastPlayerDeathAt = Time.time;
-            _activeDriver._session.RecordPlayerDeath();
-            TelemetryEventQueue.Enqueue(TelemetrySampleBuilder.BuildPlayerDeath(_activeDriver._session, victimBody, damageInfo));
-            RequestSurvey("player_death");
-            _activeDriver.StartFlushIfIdle();
         }
 
         private static bool IsPlayerBody(CharacterBody body)

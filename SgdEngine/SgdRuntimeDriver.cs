@@ -1,6 +1,8 @@
 using GeneticsArtifact.CheatManager;
+using GeneticsArtifact.DdaDebug;
 using GeneticsArtifact.SgdEngine.Actuators;
 using GeneticsArtifact.SgdEngine.Decision;
+using GeneticsArtifact.Telemetry;
 using RoR2;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -22,11 +24,20 @@ namespace GeneticsArtifact.SgdEngine
         public static void RegisterHooks()
         {
             On.RoR2.Run.Start += Run_Start;
+            On.RoR2.Run.BeginGameOver += Run_BeginGameOver;
             SgdSensorsHooks.RegisterHooks();
+
+            // #region agent log
+            DdaDebugLog.Write("H1", "SgdRuntimeDriver.cs:RegisterHooks", "Registered SGD hooks");
+            // #endregion
         }
 
         private static void Run_Start(On.RoR2.Run.orig_Start orig, Run self)
         {
+            // #region agent log
+            DdaDebugLog.Write("H2", "SgdRuntimeDriver.cs:Run_Start:pre", "Run.Start entered", data: self != null ? ("run=" + self.name) : "run=null");
+            // #endregion
+
             orig(self);
 
             // New run started: reset SGD axes and actuators to defaults (not per-stage).
@@ -40,6 +51,51 @@ namespace GeneticsArtifact.SgdEngine
             {
                 self.gameObject.AddComponent<SgdRuntimeDriver>();
             }
+
+            // When Telemetry hooks are enabled together with SGD hooks, TelemetryRuntimeDriver does NOT
+            // detour Run.Start itself to avoid double detours. Attach it here instead.
+            if (ConfigManager.diagnosticsEnableTelemetryHooks != null &&
+                ConfigManager.diagnosticsEnableTelemetryHooks.Value &&
+                ConfigManager.telemetryEnabled.Value &&
+                self != null &&
+                self.gameObject != null &&
+                self.gameObject.GetComponent<TelemetryRuntimeDriver>() == null)
+            {
+                self.gameObject.AddComponent<TelemetryRuntimeDriver>();
+            }
+
+            // #region agent log
+            DdaDebugLog.Write(
+                "H2",
+                "SgdRuntimeDriver.cs:Run_Start:post",
+                "Run.Start completed",
+                data: "attachedSgd=" + (self != null && self.gameObject != null && self.gameObject.GetComponent<SgdRuntimeDriver>() != null) +
+                      "; attachedTelemetry=" + (self != null && self.gameObject != null && self.gameObject.GetComponent<TelemetryRuntimeDriver>() != null));
+            // #endregion
+        }
+
+        private static void Run_BeginGameOver(On.RoR2.Run.orig_BeginGameOver orig, Run self, GameEndingDef gameEndingDef)
+        {
+            // #region agent log
+            DdaDebugLog.Write(
+                "H2",
+                "SgdRuntimeDriver.cs:Run_BeginGameOver:pre",
+                "Run.BeginGameOver entered",
+                data: (gameEndingDef != null ? ("ending=" + gameEndingDef.cachedName + "; isWin=" + gameEndingDef.isWin) : "ending=null"));
+            // #endregion
+
+            if (ConfigManager.diagnosticsEnableTelemetryHooks != null &&
+                ConfigManager.diagnosticsEnableTelemetryHooks.Value &&
+                ConfigManager.telemetryEnabled.Value)
+            {
+                TelemetryRuntimeDriver.NotifyRunBeginGameOver(gameEndingDef);
+            }
+
+            orig(self, gameEndingDef);
+
+            // #region agent log
+            DdaDebugLog.Write("H2", "SgdRuntimeDriver.cs:Run_BeginGameOver:post", "Run.BeginGameOver completed");
+            // #endregion
         }
 
         private void Awake()

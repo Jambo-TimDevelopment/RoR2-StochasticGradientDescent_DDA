@@ -44,6 +44,18 @@ namespace GeneticsArtifact
         public static ConfigEntry<float> telemetryMinimumSessionSeconds;
         public static ConfigEntry<bool> researchAutoRotateDdaAlgorithms;
         public static ConfigEntry<string> researchLastRunDdaAlgorithm;
+        public static ConfigEntry<bool> researchAutoRotateRunSeeds;
+        public static ConfigEntry<string> researchRunSeedCycle;
+        public static ConfigEntry<int> researchCurrentRunSeedIndex;
+        public static ConfigEntry<string> researchCurrentRunSeed;
+
+        // Diagnostics / feature flags (for isolating hook-related issues).
+        public static ConfigEntry<bool> diagnosticsEnableGeneTokenCalcHooks;
+        public static ConfigEntry<bool> diagnosticsEnableGeneticEngineHooks;
+        public static ConfigEntry<bool> diagnosticsEnableSgdHooks;
+        public static ConfigEntry<bool> diagnosticsEnableSgdActuatorsHooks;
+        public static ConfigEntry<bool> diagnosticsEnableTelemetryHooks;
+        public static ConfigEntry<bool> diagnosticsEnableRunModeRotatorHooks;
 
         public static void Init(ConfigFile configFile)
         {
@@ -215,6 +227,57 @@ namespace GeneticsArtifact
                 new ConfigDescription(
                     "Last hidden DDA algorithm launched by the research rotator. Do not edit during experiments unless you want to reset the sequence.",
                     new AcceptableValueList<string>("None", "FLS", "GA", "SGD")));
+
+            researchAutoRotateRunSeeds = configFile.Bind<bool>(
+                new ConfigDefinition("Research DDA Rotation", "Auto Rotate Run Seeds"),
+                true,
+                new ConfigDescription("When enabled, keeps one configured run seed for a full FLS -> GA -> SGD cycle, then advances to the next seed."));
+
+            researchRunSeedCycle = configFile.Bind<string>(
+                new ConfigDefinition("Research DDA Rotation", "Run Seed Cycle"),
+                "8459684015804115075,8821573197706646788,2559340200192868678,97399012779323199,1444060760769064427",
+                new ConfigDescription("Comma-separated list of planned run seeds for thesis experiments. Example: 12345,67890,13579. Empty disables forced seed assignment."));
+
+            researchCurrentRunSeedIndex = configFile.Bind<int>(
+                new ConfigDefinition("Research DDA Rotation", "Current Run Seed Index"),
+                0,
+                new ConfigDescription("Index in Run Seed Cycle currently used by the hidden research rotator. Do not edit during experiments unless you want to reset the sequence.", new AcceptableValueRange<int>(0, 1000000)));
+
+            researchCurrentRunSeed = configFile.Bind<string>(
+                new ConfigDefinition("Research DDA Rotation", "Current Run Seed"),
+                "",
+                new ConfigDescription("Current planned run seed used for the active FLS -> GA -> SGD cycle. Stored to survive client restarts."));
+
+            // --- Diagnostics / feature flags ---
+            diagnosticsEnableGeneTokenCalcHooks = configFile.Bind<bool>(
+                new ConfigDefinition("Diagnostics", "Enable GeneTokenCalc Hooks"),
+                false,
+                new ConfigDescription("Enable RecalculateStats hooks (GeneTokenCalc). Keep disabled while diagnosing repeat-run startup errors."));
+
+            diagnosticsEnableGeneticEngineHooks = configFile.Bind<bool>(
+                new ConfigDefinition("Diagnostics", "Enable GeneticEngine Hooks"),
+                false,
+                new ConfigDescription("Enable GeneticEngine hooks (GeneEngineDriver). Keep disabled while diagnosing repeat-run startup errors."));
+
+            diagnosticsEnableSgdHooks = configFile.Bind<bool>(
+                new ConfigDefinition("Diagnostics", "Enable SGD Hooks"),
+                true,
+                new ConfigDescription("Enable SGD runtime + sensors hooks. Keep disabled while diagnosing repeat-run startup errors."));
+
+            diagnosticsEnableSgdActuatorsHooks = configFile.Bind<bool>(
+                new ConfigDefinition("Diagnostics", "Enable SGD Actuators Hooks"),
+                false,
+                new ConfigDescription("Enable SGD actuators hooks. Keep disabled while diagnosing repeat-run startup errors."));
+
+            diagnosticsEnableTelemetryHooks = configFile.Bind<bool>(
+                new ConfigDefinition("Diagnostics", "Enable Telemetry Hooks"),
+                true,
+                new ConfigDescription("Enable telemetry hooks (dda_sample/session_end/etc). Keep disabled while diagnosing repeat-run startup errors."));
+
+            diagnosticsEnableRunModeRotatorHooks = configFile.Bind<bool>(
+                new ConfigDefinition("Diagnostics", "Enable Research Rotator Hooks"),
+                false,
+                new ConfigDescription("Enable research run mode rotator hooks. Keep disabled while diagnosing repeat-run startup errors."));
         }
 
         public static void Save()

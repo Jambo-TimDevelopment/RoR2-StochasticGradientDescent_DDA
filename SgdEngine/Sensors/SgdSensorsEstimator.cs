@@ -14,6 +14,7 @@ namespace GeneticsArtifact.SgdEngine
     {
         public const float DefaultTauSeconds = 7.5f;
         public const float DefaultWindowSeconds = 60f;
+        public const float DefaultDamageRateWindowSeconds = 10.0f;
 
         // Threshold for low-health uptime sensor.
         public const float DefaultLowHealthThreshold = 0.30f;
@@ -30,6 +31,10 @@ namespace GeneticsArtifact.SgdEngine
         private float _combatUptimeEma;
         private float _lowHealthUptimeEma;
         private float _avgTtkSecondsEma;
+        private float _incomingDamageWindowSum;
+        private float _outgoingDamageWindowSum;
+        private int _incomingHitCountWindow;
+        private float _damageRateWindowElapsed;
 
         private readonly List<float> _playerDeathTimes = new List<float>(8);
 
@@ -55,6 +60,10 @@ namespace GeneticsArtifact.SgdEngine
             _combatUptimeEma = 0f;
             _lowHealthUptimeEma = 0f;
             _avgTtkSecondsEma = 0f;
+            _incomingDamageWindowSum = 0f;
+            _outgoingDamageWindowSum = 0f;
+            _incomingHitCountWindow = 0;
+            _damageRateWindowElapsed = 0f;
             _playerDeathTimes.Clear();
             _victimFirstHitTime.Clear();
             _ttkSamples.Clear();
@@ -68,6 +77,7 @@ namespace GeneticsArtifact.SgdEngine
             }
 
             float alpha = ComputeEmaAlpha(dt, _tauSeconds);
+            UpdateDamageRateWindows(dt);
 
             // Combat uptime: 1 when in combat, else 0.
             float combatSignal = playerBody.outOfCombat ? 0f : 1f;
@@ -91,29 +101,52 @@ namespace GeneticsArtifact.SgdEngine
         {
             if (victimPlayerBody == null) return;
             if (damage <= 0f || float.IsNaN(damage) || float.IsInfinity(damage)) return;
-            if (dt <= 0f || float.IsNaN(dt) || float.IsInfinity(dt)) return;
 
-            float alpha = ComputeEmaAlpha(dt, _tauSeconds);
-            float rate = damage / dt;
-            _incomingDamageRateEma = Ema(_incomingDamageRateEma, rate, alpha);
-            _hitRateOnPlayerEma = Ema(_hitRateOnPlayerEma, 1f / dt, alpha);
+            _incomingDamageWindowSum += damage;
+            _incomingHitCountWindow++;
         }
 
         public void ObserveOutgoingDamage(CharacterBody attackerPlayerBody, CharacterBody victimMonsterBody, float damage, float dt)
         {
             if (attackerPlayerBody == null || victimMonsterBody == null) return;
             if (damage <= 0f || float.IsNaN(damage) || float.IsInfinity(damage)) return;
-            if (dt <= 0f || float.IsNaN(dt) || float.IsInfinity(dt)) return;
 
-            float alpha = ComputeEmaAlpha(dt, _tauSeconds);
-            float rate = damage / dt;
-            _outgoingDamageRateEma = Ema(_outgoingDamageRateEma, rate, alpha);
+            _outgoingDamageWindowSum += damage;
 
             int victimId = victimMonsterBody.gameObject != null ? victimMonsterBody.gameObject.GetInstanceID() : 0;
             if (victimId != 0 && !_victimFirstHitTime.ContainsKey(victimId))
             {
                 _victimFirstHitTime[victimId] = Time.time;
             }
+        }
+
+        private void UpdateDamageRateWindows(float dt)
+        {
+            if (dt <= 0f || float.IsNaN(dt) || float.IsInfinity(dt))
+            {
+                return;
+            }
+
+            _damageRateWindowElapsed += dt;
+            if (_damageRateWindowElapsed < DefaultDamageRateWindowSeconds)
+            {
+                return;
+            }
+
+            float elapsed = Mathf.Max(0.001f, _damageRateWindowElapsed);
+            float alpha = ComputeEmaAlpha(elapsed, _tauSeconds);
+            float incomingRate = _incomingDamageWindowSum / elapsed;
+            float outgoingRate = _outgoingDamageWindowSum / elapsed;
+            float hitRate = _incomingHitCountWindow / elapsed;
+
+            _incomingDamageRateEma = Ema(_incomingDamageRateEma, incomingRate, alpha);
+            _outgoingDamageRateEma = Ema(_outgoingDamageRateEma, outgoingRate, alpha);
+            _hitRateOnPlayerEma = Ema(_hitRateOnPlayerEma, hitRate, alpha);
+
+            _incomingDamageWindowSum = 0f;
+            _outgoingDamageWindowSum = 0f;
+            _incomingHitCountWindow = 0;
+            _damageRateWindowElapsed = 0f;
         }
 
         public void ObserveMonsterDeath(CharacterBody deadMonsterBody)

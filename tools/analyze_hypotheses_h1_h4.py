@@ -48,6 +48,16 @@ def _normalize_mojibake(text: str) -> str:
         return text
 
 
+AXIS_TO_PLANE = {
+    "attack_damage": "damage",
+    "attack_speed": "attackSpeed",
+    "max_health": "hp",
+    "move_speed": "moveSpeed",
+}
+
+H3_PLANES = ("damage", "attackSpeed", "hp", "moveSpeed")
+
+
 def _pearson_corr(xs: list[float], ys: list[float]) -> float | None:
     if len(xs) != len(ys) or len(xs) < 2:
         return None
@@ -105,6 +115,7 @@ class SessionMetrics:
     participant_id: str = ""
     telemetry_schema_version: int | None = None
     player_body: str = ""
+    duration_seconds: float | None = None
 
     # H1
     h1_mae_align: float | None = None
@@ -114,9 +125,17 @@ class SessionMetrics:
     # H2
     h2_jump_rate_flag: float | None = None
     h2_jump_rate_tau: float | None = None
+    h2_mean_abs_delta_multiplier: float | None = None
+    h2_p95_abs_delta_multiplier: float | None = None
+    h2_max_abs_delta_multiplier: float | None = None
+    h2_mean_abs_delta_theta: float | None = None
+    h2_mean_abs_relative_delta_multiplier: float | None = None
     tau_jump: float | None = None
 
     # H3
+    h3_axis_mean_abs_error: float | None = None
+    h3_axis_within_stable_rate: float | None = None
+    h3_axis_corr_delta_skill_challenge: float | None = None
     h3_corr_dvp_dvc: float | None = None
     h3_mean_virtual_gap_abs: float | None = None
     epsilon_v: float | None = None
@@ -126,6 +145,12 @@ class SessionMetrics:
     h4_recovery_times: list[float] = field(default_factory=list)
     h4_mean_recovery_seconds: float | None = None
     h4_recovery_events_count: int = 0
+    h4_degradation_events_count: int = 0
+    h4_degradation_sample_rate: float | None = None
+    h4_max_degradation_signal: float | None = None
+    h4_max_time_above_050_seconds: float | None = None
+    h4_max_time_above_060_seconds: float | None = None
+    h4_max_time_above_070_seconds: float | None = None
 
 
 def _detect_axes(props: dict) -> list[str]:
@@ -134,6 +159,20 @@ def _detect_axes(props: dict) -> list[str]:
         if k.startswith("axis_") and k.endswith("_abs_error"):
             axes.add(k[len("axis_") : -len("_abs_error")])
     return sorted(axes)
+
+
+def _percentile(values: list[float], q: float) -> float | None:
+    if not values:
+        return None
+    if len(values) == 1:
+        return values[0]
+    xs = sorted(values)
+    pos = (len(xs) - 1) * q
+    lo = int(math.floor(pos))
+    hi = int(math.ceil(pos))
+    if lo == hi:
+        return xs[lo]
+    return xs[lo] + ((xs[hi] - xs[lo]) * (pos - lo))
 
 
 def _to_int(v):
@@ -176,6 +215,18 @@ def main() -> int:
         action="store_true",
         help="Restrict analysis to sessions where player_body indicates Huntress/Охотница.",
     )
+    ap.add_argument(
+        "--min-schema-version",
+        type=int,
+        default=0,
+        help="Exclude sessions with telemetry_schema_version below this value.",
+    )
+    ap.add_argument(
+        "--min-axis-obs",
+        type=int,
+        default=0,
+        help="Exclude sessions with fewer axis observations.",
+    )
     args = ap.parse_args()
 
     files: list[str] = []
@@ -188,17 +239,34 @@ def main() -> int:
     sess_axes_abs_errors: dict[str, list[float]] = {}
     sess_axes_jump_flags: dict[str, list[int]] = {}
     sess_axes_jump_tau: dict[str, list[int]] = {}
+    sess_abs_delta_multiplier: dict[str, list[float]] = {}
+    sess_abs_delta_theta: dict[str, list[float]] = {}
+    sess_abs_relative_delta_multiplier: dict[str, list[float]] = {}
     sess_tau_jump: dict[str, float] = {}
     sess_eps_v: dict[str, float] = {}
+    sess_eps_stable: dict[str, float] = {}
+    sess_h3_axis_abs_errors: dict[str, list[float]] = {}
+    sess_h3_axis_within_stable: dict[str, list[int]] = {}
+    sess_h3_delta_skill: dict[str, list[float]] = {}
+    sess_h3_delta_challenge: dict[str, list[float]] = {}
     sess_dvp: dict[str, list[float]] = {}
     sess_dvc: dict[str, list[float]] = {}
     sess_vgap: dict[str, list[float]] = {}
     sess_within_eps: dict[str, list[int]] = {}
+    sess_degradation_flags: dict[str, list[int]] = {}
+    sess_degradation_signals: dict[str, list[float]] = {}
+    sess_time_above_050: dict[str, list[float]] = {}
+    sess_time_above_060: dict[str, list[float]] = {}
+    sess_time_above_070: dict[str, list[float]] = {}
+    sess_degradation_events: dict[str, int] = {}
     sess_mode: dict[str, str] = {}
     sess_participant: dict[str, str] = {}
     sess_schema: dict[str, int] = {}
+    sess_duration: dict[str, float] = {}
     sess_recovery: dict[str, list[float]] = {}
     sess_player_body: dict[str, str] = {}
+    prev_axis_signals: dict[tuple[str, str], tuple[float, float]] = {}
+    prev_axis_multiplier: dict[tuple[str, str], float] = {}
 
     bad_json_lines = 0
     seen_events = 0
@@ -246,13 +314,33 @@ def main() -> int:
             if eps_v is not None and session_id not in sess_eps_v:
                 sess_eps_v[session_id] = eps_v
 
+            eps_stable = _safe_float(props.get("epsilon_stable"))
+            if eps_stable is not None and session_id not in sess_eps_stable:
+                sess_eps_stable[session_id] = eps_stable
+
+            if event == "dda_session_end" or (props.get("event_kind") == "session_end"):
+                duration = _safe_float(props.get("duration_seconds"))
+                if duration is None:
+                    duration = _safe_float(props.get("run_elapsed_seconds"))
+                if duration is not None:
+                    sess_duration[session_id] = duration
+
             if event == "dda_sample":
                 axes = _detect_axes(props)
                 if axes:
                     for ax in axes:
+                        plane = str(props.get(f"axis_{ax}_plane") or AXIS_TO_PLANE.get(ax, ax))
+                        if plane not in H3_PLANES:
+                            continue
+
                         ae = _safe_float(props.get(f"axis_{ax}_abs_error"))
                         if ae is not None:
                             sess_axes_abs_errors.setdefault(session_id, []).append(ae)
+                            sess_h3_axis_abs_errors.setdefault(session_id, []).append(ae)
+                            stable = eps_stable if eps_stable is not None else 0.10
+                            sess_h3_axis_within_stable.setdefault(session_id, []).append(
+                                1 if ae <= stable else 0
+                            )
 
                         jf = props.get(f"axis_{ax}_is_jump")
                         if jf is not None:
@@ -265,6 +353,40 @@ def main() -> int:
                             sess_axes_jump_tau.setdefault(session_id, []).append(
                                 1 if abs(dm) > tau_jump else 0
                             )
+                        if dm is not None:
+                            sess_abs_delta_multiplier.setdefault(session_id, []).append(abs(dm))
+
+                        dtheta = _safe_float(props.get(f"axis_{ax}_delta_theta"))
+                        multiplier = _safe_float(props.get(f"axis_{ax}_multiplier"))
+                        key = (session_id, ax)
+                        if dtheta is None and multiplier is not None and key in prev_axis_multiplier:
+                            prev = max(0.0001, prev_axis_multiplier[key])
+                            dtheta = math.log(max(0.0001, multiplier)) - math.log(prev)
+                        if dtheta is not None and key in prev_axis_multiplier:
+                            sess_abs_delta_theta.setdefault(session_id, []).append(abs(dtheta))
+
+                        rel_delta = _safe_float(props.get(f"axis_{ax}_relative_delta_multiplier"))
+                        if rel_delta is None and dm is not None and key in prev_axis_multiplier:
+                            rel_delta = dm / max(0.0001, prev_axis_multiplier[key])
+                        if rel_delta is not None and key in prev_axis_multiplier:
+                            sess_abs_relative_delta_multiplier.setdefault(session_id, []).append(abs(rel_delta))
+
+                        skill = _safe_float(props.get(f"axis_{ax}_skill01"))
+                        challenge = _safe_float(props.get(f"axis_{ax}_challenge01"))
+                        dskill = _safe_float(props.get(f"axis_{ax}_delta_skill01"))
+                        dchallenge = _safe_float(props.get(f"axis_{ax}_delta_challenge01"))
+                        if (dskill is None or dchallenge is None) and skill is not None and challenge is not None and key in prev_axis_signals:
+                            prev_skill, prev_challenge = prev_axis_signals[key]
+                            dskill = skill - prev_skill
+                            dchallenge = challenge - prev_challenge
+                        if dskill is not None and dchallenge is not None and key in prev_axis_signals:
+                            sess_h3_delta_skill.setdefault(session_id, []).append(dskill)
+                            sess_h3_delta_challenge.setdefault(session_id, []).append(dchallenge)
+
+                        if skill is not None and challenge is not None:
+                            prev_axis_signals[key] = (skill, challenge)
+                        if multiplier is not None:
+                            prev_axis_multiplier[key] = multiplier
 
                 dvp = _safe_float(props.get("delta_virtual_power"))
                 dvc = _safe_float(props.get("delta_virtual_challenge"))
@@ -283,20 +405,51 @@ def main() -> int:
                         1 if bool(within) else 0
                     )
 
+                degraded = props.get("is_degraded")
+                if degraded is not None:
+                    sess_degradation_flags.setdefault(session_id, []).append(
+                        1 if bool(degraded) else 0
+                    )
+
+                degradation_signal = _safe_float(props.get("degradation_signal"))
+                if degradation_signal is not None:
+                    sess_degradation_signals.setdefault(session_id, []).append(degradation_signal)
+
+                for key_name, target in (
+                    ("degradation_signal_above_050_seconds", sess_time_above_050),
+                    ("degradation_signal_above_060_seconds", sess_time_above_060),
+                    ("degradation_signal_above_070_seconds", sess_time_above_070),
+                ):
+                    value = _safe_float(props.get(key_name))
+                    if value is not None:
+                        target.setdefault(session_id, []).append(value)
+
             if event == "dda_recovery":
                 rt = _safe_float(props.get("recovery_elapsed_seconds"))
                 if rt is not None:
                     sess_recovery.setdefault(session_id, []).append(rt)
 
+            if event == "dda_degradation_start":
+                sess_degradation_events[session_id] = sess_degradation_events.get(session_id, 0) + 1
+
     # Build session rows
     sessions: list[SessionMetrics] = []
-    all_session_ids = (sess_mode.keys() | sess_axes_abs_errors.keys() | sess_recovery.keys() | sess_player_body.keys())
+    all_session_ids = (
+        sess_mode.keys()
+        | sess_axes_abs_errors.keys()
+        | sess_recovery.keys()
+        | sess_player_body.keys()
+        | sess_h3_axis_abs_errors.keys()
+        | sess_degradation_flags.keys()
+        | sess_degradation_events.keys()
+    )
     for session_id in sorted(all_session_ids):
         m = SessionMetrics(session_id=session_id)
         m.dda_mode = sess_mode.get(session_id, "")
         m.participant_id = sess_participant.get(session_id, "")
         m.telemetry_schema_version = sess_schema.get(session_id)
         m.player_body = sess_player_body.get(session_id, "")
+        m.duration_seconds = sess_duration.get(session_id)
 
         abs_errors = sess_axes_abs_errors.get(session_id, [])
         m.axis_obs_count = len(abs_errors)
@@ -312,6 +465,37 @@ def main() -> int:
         jump_tau = sess_axes_jump_tau.get(session_id, [])
         if jump_tau:
             m.h2_jump_rate_tau = statistics.fmean(jump_tau)
+
+        abs_delta_multiplier = sess_abs_delta_multiplier.get(session_id, [])
+        if abs_delta_multiplier:
+            m.h2_mean_abs_delta_multiplier = statistics.fmean(abs_delta_multiplier)
+            m.h2_p95_abs_delta_multiplier = _percentile(abs_delta_multiplier, 0.95)
+            m.h2_max_abs_delta_multiplier = max(abs_delta_multiplier)
+
+        abs_delta_theta = sess_abs_delta_theta.get(session_id, [])
+        if abs_delta_theta:
+            m.h2_mean_abs_delta_theta = statistics.fmean(abs_delta_theta)
+
+        abs_relative_delta = sess_abs_relative_delta_multiplier.get(session_id, [])
+        if abs_relative_delta:
+            m.h2_mean_abs_relative_delta_multiplier = statistics.fmean(abs_relative_delta)
+
+        h3_axis_errors = sess_h3_axis_abs_errors.get(session_id, [])
+        if h3_axis_errors:
+            m.h3_axis_mean_abs_error = statistics.fmean(h3_axis_errors)
+
+        h3_axis_within = sess_h3_axis_within_stable.get(session_id, [])
+        if h3_axis_within:
+            m.h3_axis_within_stable_rate = statistics.fmean(h3_axis_within)
+
+        dskill_axis = sess_h3_delta_skill.get(session_id, [])
+        dchallenge_axis = sess_h3_delta_challenge.get(session_id, [])
+        n_axis_delta = min(len(dskill_axis), len(dchallenge_axis))
+        if n_axis_delta >= 2:
+            m.h3_axis_corr_delta_skill_challenge = _pearson_corr(
+                dskill_axis[:n_axis_delta],
+                dchallenge_axis[:n_axis_delta],
+            )
 
         vgap = sess_vgap.get(session_id, [])
         if vgap:
@@ -336,6 +520,23 @@ def main() -> int:
         if rec:
             m.h4_mean_recovery_seconds = statistics.fmean(rec)
 
+        m.h4_degradation_events_count = sess_degradation_events.get(session_id, 0)
+
+        degradation_flags = sess_degradation_flags.get(session_id, [])
+        if degradation_flags:
+            m.h4_degradation_sample_rate = statistics.fmean(degradation_flags)
+
+        degradation_signals = sess_degradation_signals.get(session_id, [])
+        if degradation_signals:
+            m.h4_max_degradation_signal = max(degradation_signals)
+
+        if sess_time_above_050.get(session_id):
+            m.h4_max_time_above_050_seconds = max(sess_time_above_050[session_id])
+        if sess_time_above_060.get(session_id):
+            m.h4_max_time_above_060_seconds = max(sess_time_above_060[session_id])
+        if sess_time_above_070.get(session_id):
+            m.h4_max_time_above_070_seconds = max(sess_time_above_070[session_id])
+
         # approximate samples count: infer from axis obs count / axes count if possible
         # (purely informational)
         m.samples_count = 0
@@ -349,6 +550,15 @@ def main() -> int:
             return ("охотниц" in t) or ("huntress" in t)
 
         sessions = [s for s in sessions if _is_huntress(s.player_body)]
+
+    if args.min_schema_version > 0:
+        sessions = [
+            s for s in sessions
+            if s.telemetry_schema_version is not None and s.telemetry_schema_version >= args.min_schema_version
+        ]
+
+    if args.min_axis_obs > 0:
+        sessions = [s for s in sessions if s.axis_obs_count >= args.min_axis_obs]
 
     out_dir = os.path.normpath(args.out_dir)
     os.makedirs(out_dir, exist_ok=True)
@@ -364,15 +574,30 @@ def main() -> int:
                 "participant_id",
                 "telemetry_schema_version",
                 "player_body",
+                "duration_seconds",
                 "axis_obs_count",
                 "h1_mae_align",
                 "tau_jump",
                 "h2_jump_rate_flag",
                 "h2_jump_rate_tau",
+                "h2_mean_abs_delta_multiplier",
+                "h2_p95_abs_delta_multiplier",
+                "h2_max_abs_delta_multiplier",
+                "h2_mean_abs_delta_theta",
+                "h2_mean_abs_relative_delta_multiplier",
                 "epsilon_v",
+                "h3_axis_mean_abs_error",
+                "h3_axis_within_stable_rate",
+                "h3_axis_corr_delta_skill_challenge",
                 "h3_corr_dvp_dvc",
                 "h3_mean_virtual_gap_abs",
                 "h3_within_epsilon_rate",
+                "h4_degradation_events_count",
+                "h4_degradation_sample_rate",
+                "h4_max_degradation_signal",
+                "h4_max_time_above_050_seconds",
+                "h4_max_time_above_060_seconds",
+                "h4_max_time_above_070_seconds",
                 "h4_recovery_events_count",
                 "h4_mean_recovery_seconds",
             ]
@@ -385,15 +610,30 @@ def main() -> int:
                     s.participant_id,
                     s.telemetry_schema_version,
                     s.player_body,
+                    "" if s.duration_seconds is None else s.duration_seconds,
                     s.axis_obs_count,
                     "" if s.h1_mae_align is None else s.h1_mae_align,
                     "" if s.tau_jump is None else s.tau_jump,
                     "" if s.h2_jump_rate_flag is None else s.h2_jump_rate_flag,
                     "" if s.h2_jump_rate_tau is None else s.h2_jump_rate_tau,
+                    "" if s.h2_mean_abs_delta_multiplier is None else s.h2_mean_abs_delta_multiplier,
+                    "" if s.h2_p95_abs_delta_multiplier is None else s.h2_p95_abs_delta_multiplier,
+                    "" if s.h2_max_abs_delta_multiplier is None else s.h2_max_abs_delta_multiplier,
+                    "" if s.h2_mean_abs_delta_theta is None else s.h2_mean_abs_delta_theta,
+                    "" if s.h2_mean_abs_relative_delta_multiplier is None else s.h2_mean_abs_relative_delta_multiplier,
                     "" if s.epsilon_v is None else s.epsilon_v,
+                    "" if s.h3_axis_mean_abs_error is None else s.h3_axis_mean_abs_error,
+                    "" if s.h3_axis_within_stable_rate is None else s.h3_axis_within_stable_rate,
+                    "" if s.h3_axis_corr_delta_skill_challenge is None else s.h3_axis_corr_delta_skill_challenge,
                     "" if s.h3_corr_dvp_dvc is None else s.h3_corr_dvp_dvc,
                     "" if s.h3_mean_virtual_gap_abs is None else s.h3_mean_virtual_gap_abs,
                     "" if s.h3_within_epsilon_rate is None else s.h3_within_epsilon_rate,
+                    s.h4_degradation_events_count,
+                    "" if s.h4_degradation_sample_rate is None else s.h4_degradation_sample_rate,
+                    "" if s.h4_max_degradation_signal is None else s.h4_max_degradation_signal,
+                    "" if s.h4_max_time_above_050_seconds is None else s.h4_max_time_above_050_seconds,
+                    "" if s.h4_max_time_above_060_seconds is None else s.h4_max_time_above_060_seconds,
+                    "" if s.h4_max_time_above_070_seconds is None else s.h4_max_time_above_070_seconds,
                     s.h4_recovery_events_count,
                     "" if s.h4_mean_recovery_seconds is None else s.h4_mean_recovery_seconds,
                 ]
@@ -427,6 +667,10 @@ def main() -> int:
         f.write("# Pilot check: H1-H4 on PostHog export\n\n")
         if args.only_huntress:
             f.write("- filter: only Huntress/Охотница sessions\n")
+        if args.min_schema_version > 0:
+            f.write(f"- filter: telemetry_schema_version >= {args.min_schema_version}\n")
+        if args.min_axis_obs > 0:
+            f.write(f"- filter: axis_obs_count >= {args.min_axis_obs}\n")
         f.write(f"- files: {len(files)}\n")
         f.write(f"- parsed_events: {seen_events}\n")
         f.write(f"- bad_json_lines: {bad_json_lines}\n")
@@ -483,18 +727,73 @@ def main() -> int:
             lower_is_better=True,
         )
         _write_metric_block(
-            "H3 coupling (corr(delta_virtual_power, delta_virtual_challenge) per session)",
+            "H2 smoothness (mean abs delta_multiplier per session)",
+            "h2_mean_abs_delta_multiplier",
+            lower_is_better=True,
+        )
+        _write_metric_block(
+            "H2 smoothness (p95 abs delta_multiplier per session)",
+            "h2_p95_abs_delta_multiplier",
+            lower_is_better=True,
+        )
+        _write_metric_block(
+            "H2 smoothness (mean abs delta_theta per session)",
+            "h2_mean_abs_delta_theta",
+            lower_is_better=True,
+        )
+        _write_metric_block(
+            "H2 smoothness (mean abs relative delta_multiplier per session)",
+            "h2_mean_abs_relative_delta_multiplier",
+            lower_is_better=True,
+        )
+        _write_metric_block(
+            "H3 axis closeness (4-plane mean axis abs error: damage/attackSpeed/hp/moveSpeed)",
+            "h3_axis_mean_abs_error",
+            lower_is_better=True,
+        )
+        _write_metric_block(
+            "H3 axis stability (rate axis abs error <= epsilon_stable)",
+            "h3_axis_within_stable_rate",
+            lower_is_better=False,
+        )
+        _write_metric_block(
+            "H3 axis coupling (corr(delta_skill_i, delta_challenge_i) within 4 planes)",
+            "h3_axis_corr_delta_skill_challenge",
+            lower_is_better=False,
+        )
+        _write_metric_block(
+            "Legacy H3 coupling (corr(delta_virtual_power, delta_virtual_challenge) per session)",
             "h3_corr_dvp_dvc",
             lower_is_better=False,
         )
         _write_metric_block(
-            "H3 closeness (mean virtual_gap_abs per session)",
+            "Legacy H3 closeness (mean virtual_gap_abs per session)",
             "h3_mean_virtual_gap_abs",
             lower_is_better=True,
         )
         _write_metric_block(
-            "H3 closeness (rate is_within_virtual_gap_epsilon per session)",
+            "Legacy H3 closeness (rate is_within_virtual_gap_epsilon per session)",
             "h3_within_epsilon_rate",
+            lower_is_better=False,
+        )
+        _write_metric_block(
+            "H4 degradation presence (degraded sample rate)",
+            "h4_degradation_sample_rate",
+            lower_is_better=False,
+        )
+        _write_metric_block(
+            "H4 degradation signal (max degradation_signal per session)",
+            "h4_max_degradation_signal",
+            lower_is_better=False,
+        )
+        _write_metric_block(
+            "H4 diagnostics (max consecutive seconds above 0.60)",
+            "h4_max_time_above_060_seconds",
+            lower_is_better=False,
+        )
+        _write_metric_block(
+            "H4 diagnostics (max consecutive seconds above 0.70)",
+            "h4_max_time_above_070_seconds",
             lower_is_better=False,
         )
         _write_metric_block(
@@ -503,15 +802,27 @@ def main() -> int:
             lower_is_better=True,
         )
 
+        f.write("\n## H4 missingness / episode counts\n\n")
+        for mode in modes:
+            mode_sessions = by_mode.get(mode, [])
+            with_recovery = sum(1 for s in mode_sessions if s.h4_recovery_events_count > 0)
+            with_degradation = sum(1 for s in mode_sessions if s.h4_degradation_events_count > 0)
+            f.write(
+                f"- {mode}: sessions={len(mode_sessions)} degradation_start_sessions={with_degradation} recovery_sessions={with_recovery}\n"
+            )
+
         f.write("\n## Notes / limitations\n\n")
         f.write(
             "- This is a *pilot* check: all statistics are computed on **session-level aggregates**; bootstrap CI is shown only as an uncertainty visualization for tiny n.\n"
         )
         f.write(
-            "- H2 may be trivially zero if the run produced no jumps in multipliers; in that case it is not evidence *for* smoothness, only lack of observed jumps.\n"
+            "- H2 now reports continuous smoothness metrics in addition to binary jump-rate; binary zero alone is not evidence *for* smoothness.\n"
         )
         f.write(
             "- For H4, we rely on `dda_recovery` events and `recovery_elapsed_seconds`; if sessions contain no recovery events, H4 is not testable there.\n"
+        )
+        f.write(
+            "- H3 primary metrics are axis-based over the four fixed planes: `damage`, `attackSpeed`, `hp`, `moveSpeed`; legacy virtual gap metrics are diagnostic only.\n"
         )
 
     print(f"[ok] wrote {csv_path}")

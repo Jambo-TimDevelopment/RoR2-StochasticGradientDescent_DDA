@@ -46,10 +46,10 @@ namespace GeneticsArtifact.Telemetry
             float asError = asChallenge - asSkill;
             float dmgError = dmgChallenge - dmgSkill;
 
-            AddAxisProperties(props, "max_health", hpSkill, hpChallenge, hpError, snapshot.MaxHealth, session.PreviousMaxHealthMultiplier, session.IsJump(snapshot.MaxHealth, session.PreviousMaxHealthMultiplier));
-            AddAxisProperties(props, "move_speed", msSkill, msChallenge, msError, snapshot.MoveSpeed, session.PreviousMoveSpeedMultiplier, session.IsJump(snapshot.MoveSpeed, session.PreviousMoveSpeedMultiplier));
-            AddAxisProperties(props, "attack_speed", asSkill, asChallenge, asError, snapshot.AttackSpeed, session.PreviousAttackSpeedMultiplier, session.IsJump(snapshot.AttackSpeed, session.PreviousAttackSpeedMultiplier));
-            AddAxisProperties(props, "attack_damage", dmgSkill, dmgChallenge, dmgError, snapshot.AttackDamage, session.PreviousAttackDamageMultiplier, session.IsJump(snapshot.AttackDamage, session.PreviousAttackDamageMultiplier));
+            AddAxisProperties(props, "max_health", "hp", hpSkill, hpChallenge, hpError, snapshot.MaxHealth, session.PreviousMaxHealthMultiplier, session.PreviousMaxHealthSkill01, session.PreviousMaxHealthChallenge01, session.HasPreviousSample, session.IsJump(snapshot.MaxHealth, session.PreviousMaxHealthMultiplier));
+            AddAxisProperties(props, "move_speed", "moveSpeed", msSkill, msChallenge, msError, snapshot.MoveSpeed, session.PreviousMoveSpeedMultiplier, session.PreviousMoveSpeedSkill01, session.PreviousMoveSpeedChallenge01, session.HasPreviousSample, session.IsJump(snapshot.MoveSpeed, session.PreviousMoveSpeedMultiplier));
+            AddAxisProperties(props, "attack_speed", "attackSpeed", asSkill, asChallenge, asError, snapshot.AttackSpeed, session.PreviousAttackSpeedMultiplier, session.PreviousAttackSpeedSkill01, session.PreviousAttackSpeedChallenge01, session.HasPreviousSample, session.IsJump(snapshot.AttackSpeed, session.PreviousAttackSpeedMultiplier));
+            AddAxisProperties(props, "attack_damage", "damage", dmgSkill, dmgChallenge, dmgError, snapshot.AttackDamage, session.PreviousAttackDamageMultiplier, session.PreviousAttackDamageSkill01, session.PreviousAttackDamageChallenge01, session.HasPreviousSample, session.IsJump(snapshot.AttackDamage, session.PreviousAttackDamageMultiplier));
 
             float virtualChallenge = ComputeVirtualChallenge(snapshot);
             float virtualGapAbs = Mathf.Abs(virtualChallenge - vp.Total);
@@ -66,18 +66,45 @@ namespace GeneticsArtifact.Telemetry
             props["virtual_gap_abs"] = virtualGapAbs;
             props["delta_virtual_power"] = deltaVirtualPower;
             props["delta_virtual_challenge"] = deltaVirtualChallenge;
-            props["is_within_virtual_gap_epsilon"] = virtualGapAbs <= (ConfigManager.telemetryVirtualGapEpsilon?.Value ?? 0.50f);
             props["is_within_stable_error_epsilon"] = meanAbsError <= (ConfigManager.telemetryStableErrorEpsilon?.Value ?? 0.10f);
-            props["degradation_signal"] = degradationSignal;
-            props["is_degraded"] = session.IsDegraded;
-            props["recovery_elapsed_seconds"] = session.RecoveryElapsedSeconds;
-            props["current_degradation_trigger"] = session.CurrentDegradationTrigger;
-            props["current_degradation_trigger_value"] = session.CurrentDegradationTriggerValue;
+            props["is_within_virtual_gap_epsilon"] = virtualGapAbs <= (ConfigManager.telemetryVirtualGapEpsilon?.Value ?? 0.50f);
+            props["h3_axis_model"] = "damage,attackSpeed,hp,moveSpeed";
+            props["h3_axis_mean_abs_error"] = meanAbsError;
+            props["h3_legacy_virtual_gap_abs"] = virtualGapAbs;
 
             AddPlayerBuildProperties(props, FindAnyPlayerBody());
 
-            session.RecordSample(Mathf.Abs(hpError), Mathf.Abs(msError), Mathf.Abs(asError), Mathf.Abs(dmgError), virtualGapAbs, snapshot, sensors, dt);
+            session.RecordSample(
+                Mathf.Abs(hpError),
+                Mathf.Abs(msError),
+                Mathf.Abs(asError),
+                Mathf.Abs(dmgError),
+                hpSkill,
+                msSkill,
+                asSkill,
+                dmgSkill,
+                hpChallenge,
+                msChallenge,
+                asChallenge,
+                dmgChallenge,
+                virtualGapAbs,
+                snapshot,
+                sensors,
+                dt);
             session.SetPreviousVirtuals(vp.Total, virtualChallenge);
+
+            props["degradation_signal"] = degradationSignal;
+            props["is_degraded"] = session.IsDegraded;
+            props["is_degraded_050"] = degradationSignal >= 0.50f;
+            props["is_degraded_060"] = degradationSignal >= 0.60f;
+            props["is_degraded_070"] = degradationSignal >= 0.70f;
+            props["degradation_signal_above_050_seconds"] = session.DegradationSignalAbove050Seconds;
+            props["degradation_signal_above_060_seconds"] = session.DegradationSignalAbove060Seconds;
+            props["degradation_signal_above_070_seconds"] = session.DegradationSignalAbove070Seconds;
+            props["degradation_signal_below_recovery_seconds"] = session.DegradationSignalBelowRecoverySeconds;
+            props["recovery_elapsed_seconds"] = session.RecoveryElapsedSeconds;
+            props["current_degradation_trigger"] = session.CurrentDegradationTrigger;
+            props["current_degradation_trigger_value"] = session.CurrentDegradationTriggerValue;
 
             return new TelemetryEvent("dda_sample", props);
         }
@@ -104,6 +131,12 @@ namespace GeneticsArtifact.Telemetry
             props["deaths_per_window_norm01"] = transition.DeathsPerWindowNorm01;
             props["low_health_uptime"] = transition.LowHealthUptime;
             props["mean_abs_error_all_axes"] = transition.MeanAbsError;
+            props["degradation_threshold"] = ConfigManager.telemetryDegradationThreshold.Value;
+            props["recovery_threshold"] = ConfigManager.telemetryRecoveryThreshold.Value;
+            props["degradation_signal_above_050_seconds"] = session.DegradationSignalAbove050Seconds;
+            props["degradation_signal_above_060_seconds"] = session.DegradationSignalAbove060Seconds;
+            props["degradation_signal_above_070_seconds"] = session.DegradationSignalAbove070Seconds;
+            props["degradation_signal_below_recovery_seconds"] = session.DegradationSignalBelowRecoverySeconds;
             return new TelemetryEvent(transition.EventKind == "degradation_start" ? "dda_degradation_start" : "dda_degradation_end", props);
         }
 
@@ -150,10 +183,24 @@ namespace GeneticsArtifact.Telemetry
             props["mean_abs_error_attack_speed"] = session.MeanAbsErrorAttackSpeed;
             props["mean_abs_error_attack_damage"] = session.MeanAbsErrorAttackDamage;
             props["jump_rate_all_axes"] = session.JumpRateAllAxes;
+            props["smoothness_observations"] = session.SmoothnessObservations;
+            props["mean_abs_delta_multiplier"] = session.MeanAbsDeltaMultiplier;
+            props["mean_abs_delta_theta"] = session.MeanAbsDeltaTheta;
+            props["mean_abs_relative_delta_multiplier"] = session.MeanAbsRelativeDeltaMultiplier;
+            props["max_abs_delta_multiplier"] = session.MaxAbsDeltaMultiplier;
             props["mean_virtual_gap_abs"] = session.MeanVirtualGapAbs;
+            props["h3_axis_mean_abs_error"] =
+                (session.MeanAbsErrorMaxHealth +
+                 session.MeanAbsErrorMoveSpeed +
+                 session.MeanAbsErrorAttackSpeed +
+                 session.MeanAbsErrorAttackDamage) * 0.25f;
             props["recovery_events_count"] = session.RecoveryEventsCount;
             props["degradation_events_count"] = session.DegradationEventsCount;
             props["mean_recovery_seconds"] = session.MeanRecoverySeconds;
+            props["degradation_signal_above_050_seconds"] = session.DegradationSignalAbove050Seconds;
+            props["degradation_signal_above_060_seconds"] = session.DegradationSignalAbove060Seconds;
+            props["degradation_signal_above_070_seconds"] = session.DegradationSignalAbove070Seconds;
+            props["degradation_signal_below_recovery_seconds"] = session.DegradationSignalBelowRecoverySeconds;
             props["player_deaths_count"] = session.PlayerDeathsCount;
             props["missed_sample_intervals"] = session.MissedSampleIntervals;
             props["minimum_session_seconds"] = ConfigManager.telemetryMinimumSessionSeconds.Value;
@@ -174,11 +221,15 @@ namespace GeneticsArtifact.Telemetry
                 ["session_id"] = session.SessionId,
                 ["participant_id"] = GetParticipantId(),
                 ["mod_version"] = GeneticsArtifactPlugin.ModVer,
-                ["telemetry_schema_version"] = 2,
+                ["telemetry_schema_version"] = 3,
                 ["experiment_id"] = ConfigManager.telemetryExperimentId.Value,
                 ["condition_order"] = ConfigManager.telemetryConditionOrder.Value,
                 ["run_attempt_index"] = ConfigManager.telemetryRunAttemptIndex.Value,
                 ["configured_run_seed"] = ConfigManager.telemetryConfiguredRunSeed.Value,
+                ["research_seed_cycle"] = ConfigManager.researchRunSeedCycle.Value,
+                ["research_seed_index"] = ConfigManager.researchCurrentRunSeedIndex.Value,
+                ["research_cycle_seed"] = ConfigManager.researchCurrentRunSeed.Value,
+                ["research_seed_rotation_enabled"] = ConfigManager.researchAutoRotateRunSeeds.Value,
                 ["runtime_run_seed"] = GetRuntimeRunSeed(),
                 ["run_elapsed_seconds"] = session.ElapsedSeconds,
                 ["stage_name"] = Stage.instance?.sceneDef?.baseSceneName ?? "",
@@ -188,7 +239,9 @@ namespace GeneticsArtifact.Telemetry
                 ["artifact_enabled"] = IsArtifactEnabled(),
                 ["is_network_server"] = NetworkServer.active,
                 ["queue_count"] = TelemetryEventQueue.Count,
-                ["missed_sample_intervals"] = session.MissedSampleIntervals
+                ["missed_sample_intervals"] = session.MissedSampleIntervals,
+                ["sgd_total_steps_done"] = SgdDecisionRuntimeState.TotalStepsDone,
+                ["sgd_applied_monsters_last"] = SgdDecisionRuntimeState.AppliedMonstersLast
             };
 
             AddExperimentConfigProperties(props);
@@ -214,20 +267,39 @@ namespace GeneticsArtifact.Telemetry
         private static void AddAxisProperties(
             Dictionary<string, object> props,
             string axis,
+            string plane,
             float skill01,
             float challenge01,
             float error,
             float multiplier,
             float previousMultiplier,
+            float previousSkill01,
+            float previousChallenge01,
+            bool hasPrevious,
             bool isJump)
         {
             string prefix = "axis_" + axis + "_";
+            float safeMultiplier = Mathf.Max(0.0001f, multiplier);
+            float safePreviousMultiplier = Mathf.Max(0.0001f, previousMultiplier);
+            float deltaMultiplier = hasPrevious ? multiplier - previousMultiplier : 0f;
+            float deltaTheta = hasPrevious ? Mathf.Log(safeMultiplier) - Mathf.Log(safePreviousMultiplier) : 0f;
+            float relativeDeltaMultiplier = hasPrevious ? deltaMultiplier / safePreviousMultiplier : 0f;
+
+            props[prefix + "plane"] = plane;
             props[prefix + "skill01"] = skill01;
             props[prefix + "challenge01"] = challenge01;
             props[prefix + "error"] = error;
             props[prefix + "abs_error"] = Mathf.Abs(error);
             props[prefix + "multiplier"] = multiplier;
-            props[prefix + "delta_multiplier"] = multiplier - previousMultiplier;
+            props[prefix + "previous_multiplier"] = previousMultiplier;
+            props[prefix + "delta_multiplier"] = deltaMultiplier;
+            props[prefix + "abs_delta_multiplier"] = Mathf.Abs(deltaMultiplier);
+            props[prefix + "delta_theta"] = deltaTheta;
+            props[prefix + "abs_delta_theta"] = Mathf.Abs(deltaTheta);
+            props[prefix + "relative_delta_multiplier"] = relativeDeltaMultiplier;
+            props[prefix + "abs_relative_delta_multiplier"] = Mathf.Abs(relativeDeltaMultiplier);
+            props[prefix + "delta_skill01"] = hasPrevious ? skill01 - previousSkill01 : 0f;
+            props[prefix + "delta_challenge01"] = hasPrevious ? challenge01 - previousChallenge01 : 0f;
             props[prefix + "is_jump"] = isJump;
         }
 

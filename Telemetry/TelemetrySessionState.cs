@@ -66,6 +66,14 @@ namespace GeneticsArtifact.Telemetry
         public float PreviousMoveSpeedMultiplier { get; private set; } = 1f;
         public float PreviousAttackSpeedMultiplier { get; private set; } = 1f;
         public float PreviousAttackDamageMultiplier { get; private set; } = 1f;
+        public float PreviousMaxHealthSkill01 { get; private set; }
+        public float PreviousMoveSpeedSkill01 { get; private set; }
+        public float PreviousAttackSpeedSkill01 { get; private set; }
+        public float PreviousAttackDamageSkill01 { get; private set; }
+        public float PreviousMaxHealthChallenge01 { get; private set; }
+        public float PreviousMoveSpeedChallenge01 { get; private set; }
+        public float PreviousAttackSpeedChallenge01 { get; private set; }
+        public float PreviousAttackDamageChallenge01 { get; private set; }
         public float PreviousVirtualPower { get; private set; }
         public float PreviousVirtualChallenge { get; private set; }
 
@@ -75,6 +83,11 @@ namespace GeneticsArtifact.Telemetry
         public float SumAbsErrorAttackDamage { get; private set; }
         public int JumpCount { get; private set; }
         public int JumpObservations { get; private set; }
+        public int SmoothnessObservations { get; private set; }
+        public float SumAbsDeltaMultiplier { get; private set; }
+        public float SumAbsDeltaTheta { get; private set; }
+        public float SumAbsRelativeDeltaMultiplier { get; private set; }
+        public float MaxAbsDeltaMultiplier { get; private set; }
         public float SumVirtualGapAbs { get; private set; }
         public float SumRecoverySeconds { get; private set; }
 
@@ -82,6 +95,10 @@ namespace GeneticsArtifact.Telemetry
         public float RecoveryElapsedSeconds { get; private set; }
         public string CurrentDegradationTrigger { get; private set; } = "";
         public float CurrentDegradationTriggerValue { get; private set; }
+        public float DegradationSignalAbove050Seconds { get; private set; }
+        public float DegradationSignalAbove060Seconds { get; private set; }
+        public float DegradationSignalAbove070Seconds { get; private set; }
+        public float DegradationSignalBelowRecoverySeconds { get; private set; }
 
         private bool _hasPreviousSnapshot;
         private float _pendingRecoverySeconds = -1f;
@@ -93,8 +110,12 @@ namespace GeneticsArtifact.Telemetry
         public float MeanAbsErrorAttackSpeed => Mean(SumAbsErrorAttackSpeed, SamplesCount);
         public float MeanAbsErrorAttackDamage => Mean(SumAbsErrorAttackDamage, SamplesCount);
         public float JumpRateAllAxes => JumpObservations > 0 ? JumpCount / (float)JumpObservations : 0f;
+        public float MeanAbsDeltaMultiplier => Mean(SumAbsDeltaMultiplier, SmoothnessObservations);
+        public float MeanAbsDeltaTheta => Mean(SumAbsDeltaTheta, SmoothnessObservations);
+        public float MeanAbsRelativeDeltaMultiplier => Mean(SumAbsRelativeDeltaMultiplier, SmoothnessObservations);
         public float MeanVirtualGapAbs => Mean(SumVirtualGapAbs, SamplesCount);
         public float MeanRecoverySeconds => Mean(SumRecoverySeconds, RecoveryEventsCount);
+        public bool HasPreviousSample => _hasPreviousSnapshot;
 
         public void StartNewRun()
         {
@@ -114,6 +135,14 @@ namespace GeneticsArtifact.Telemetry
             PreviousMoveSpeedMultiplier = 1f;
             PreviousAttackSpeedMultiplier = 1f;
             PreviousAttackDamageMultiplier = 1f;
+            PreviousMaxHealthSkill01 = 0f;
+            PreviousMoveSpeedSkill01 = 0f;
+            PreviousAttackSpeedSkill01 = 0f;
+            PreviousAttackDamageSkill01 = 0f;
+            PreviousMaxHealthChallenge01 = 0f;
+            PreviousMoveSpeedChallenge01 = 0f;
+            PreviousAttackSpeedChallenge01 = 0f;
+            PreviousAttackDamageChallenge01 = 0f;
             PreviousVirtualPower = 0f;
             PreviousVirtualChallenge = 0f;
             SumAbsErrorMaxHealth = 0f;
@@ -122,12 +151,21 @@ namespace GeneticsArtifact.Telemetry
             SumAbsErrorAttackDamage = 0f;
             JumpCount = 0;
             JumpObservations = 0;
+            SmoothnessObservations = 0;
+            SumAbsDeltaMultiplier = 0f;
+            SumAbsDeltaTheta = 0f;
+            SumAbsRelativeDeltaMultiplier = 0f;
+            MaxAbsDeltaMultiplier = 0f;
             SumVirtualGapAbs = 0f;
             SumRecoverySeconds = 0f;
             IsDegraded = false;
             RecoveryElapsedSeconds = 0f;
             CurrentDegradationTrigger = "";
             CurrentDegradationTriggerValue = 0f;
+            DegradationSignalAbove050Seconds = 0f;
+            DegradationSignalAbove060Seconds = 0f;
+            DegradationSignalAbove070Seconds = 0f;
+            DegradationSignalBelowRecoverySeconds = 0f;
             _hasPreviousSnapshot = false;
             _pendingRecoverySeconds = -1f;
             _pendingDegradationTransitions.Clear();
@@ -172,6 +210,14 @@ namespace GeneticsArtifact.Telemetry
             float absErrorMoveSpeed,
             float absErrorAttackSpeed,
             float absErrorAttackDamage,
+            float maxHealthSkill01,
+            float moveSpeedSkill01,
+            float attackSpeedSkill01,
+            float attackDamageSkill01,
+            float maxHealthChallenge01,
+            float moveSpeedChallenge01,
+            float attackSpeedChallenge01,
+            float attackDamageChallenge01,
             float virtualGapAbs,
             TelemetryDifficultySnapshot snapshot,
             in SgdSensorsSample sensors,
@@ -192,6 +238,14 @@ namespace GeneticsArtifact.Telemetry
             float meanAbsError = (absErrorMaxHealth + absErrorMoveSpeed + absErrorAttackSpeed + absErrorAttackDamage) * 0.25f;
             UpdateRecovery(sensors, meanAbsError, ComputeDegradationSignal(sensors, meanAbsError), dt);
 
+            PreviousMaxHealthSkill01 = maxHealthSkill01;
+            PreviousMoveSpeedSkill01 = moveSpeedSkill01;
+            PreviousAttackSpeedSkill01 = attackSpeedSkill01;
+            PreviousAttackDamageSkill01 = attackDamageSkill01;
+            PreviousMaxHealthChallenge01 = maxHealthChallenge01;
+            PreviousMoveSpeedChallenge01 = moveSpeedChallenge01;
+            PreviousAttackSpeedChallenge01 = attackSpeedChallenge01;
+            PreviousAttackDamageChallenge01 = attackDamageChallenge01;
             PreviousMaxHealthMultiplier = snapshot.MaxHealth;
             PreviousMoveSpeedMultiplier = snapshot.MoveSpeed;
             PreviousAttackSpeedMultiplier = snapshot.AttackSpeed;
@@ -249,16 +303,35 @@ namespace GeneticsArtifact.Telemetry
         private void RecordJump(float current, float previous)
         {
             JumpObservations++;
+            RecordSmoothness(current, previous);
             if (IsJump(current, previous))
             {
                 JumpCount++;
             }
         }
 
+        private void RecordSmoothness(float current, float previous)
+        {
+            if (!_hasPreviousSnapshot) return;
+
+            float safeCurrent = Mathf.Max(0.0001f, current);
+            float safePrevious = Mathf.Max(0.0001f, previous);
+            float absDelta = Mathf.Abs(safeCurrent - safePrevious);
+            float absDeltaTheta = Mathf.Abs(Mathf.Log(safeCurrent) - Mathf.Log(safePrevious));
+            float absRelativeDelta = absDelta / safePrevious;
+
+            SmoothnessObservations++;
+            SumAbsDeltaMultiplier += absDelta;
+            SumAbsDeltaTheta += absDeltaTheta;
+            SumAbsRelativeDeltaMultiplier += absRelativeDelta;
+            MaxAbsDeltaMultiplier = Mathf.Max(MaxAbsDeltaMultiplier, absDelta);
+        }
+
         private void UpdateRecovery(in SgdSensorsSample sensors, float meanAbsError, float degradationSignal, float dt)
         {
             float degradationThreshold = ConfigManager.telemetryDegradationThreshold?.Value ?? 0.70f;
             float recoveryThreshold = ConfigManager.telemetryRecoveryThreshold?.Value ?? 0.35f;
+            UpdateDegradationDiagnosticTimers(degradationSignal, recoveryThreshold, dt);
 
             if (!IsDegraded && degradationSignal >= degradationThreshold)
             {
@@ -309,6 +382,15 @@ namespace GeneticsArtifact.Telemetry
                 CurrentDegradationTrigger = "";
                 CurrentDegradationTriggerValue = 0f;
             }
+        }
+
+        private void UpdateDegradationDiagnosticTimers(float degradationSignal, float recoveryThreshold, float dt)
+        {
+            float safeDt = Mathf.Max(0f, dt);
+            DegradationSignalAbove050Seconds = degradationSignal >= 0.50f ? DegradationSignalAbove050Seconds + safeDt : 0f;
+            DegradationSignalAbove060Seconds = degradationSignal >= 0.60f ? DegradationSignalAbove060Seconds + safeDt : 0f;
+            DegradationSignalAbove070Seconds = degradationSignal >= 0.70f ? DegradationSignalAbove070Seconds + safeDt : 0f;
+            DegradationSignalBelowRecoverySeconds = degradationSignal <= recoveryThreshold ? DegradationSignalBelowRecoverySeconds + safeDt : 0f;
         }
 
         private static void DetermineDegradationTrigger(
