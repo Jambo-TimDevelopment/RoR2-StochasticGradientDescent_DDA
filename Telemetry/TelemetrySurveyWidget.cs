@@ -1,6 +1,5 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
-using GeneticsArtifact.DdaDebug;
 using RoR2.UI;
 
 namespace GeneticsArtifact.Telemetry
@@ -167,31 +166,10 @@ namespace GeneticsArtifact.Telemetry
                 return;
             }
 
-            // #region agent log
-            DdaDebugLog.Write(
-                "H5",
-                "TelemetrySurveyWidget.cs:Show",
-                "SurveyWidget Show",
-                data: "trigger=" + (string.IsNullOrWhiteSpace(triggerReason) ? "manual" : triggerReason) +
-                      "; quitAfterClose=" + quitAfterClose +
-                      "; visibleWas=" + _visible +
-                      "; eventSystem=" + (EventSystem.current != null ? EventSystem.current.name : "null") +
-                      "; eventSystemEnabled=" + (EventSystem.current != null && EventSystem.current.enabled) +
-                      "; " + DdaDebugLog.DumpEventSystems());
-            // #endregion
-
             // If we show the survey in a menu context (non-MP EventSystem), do NOT restore the
             // in-run cursor state afterwards. Otherwise the main menu can end up with hidden cursor.
             if (EventSystem.current != null && !(EventSystem.current is MPEventSystem))
             {
-                // #region agent log
-                DdaDebugLog.Write(
-                    "H8",
-                    "TelemetrySurveyWidget.cs:Show:menuCursorOverride",
-                    "Menu context detected: overriding saved cursor state to visible/unlocked",
-                    data: "currentEventSystem=" + EventSystem.current.name);
-                // #endregion
-
                 _instance._savedCursorState = true;
                 _instance._previousCursorVisible = true;
                 _instance._previousCursorLockMode = CursorLockMode.None;
@@ -381,33 +359,8 @@ namespace GeneticsArtifact.Telemetry
         private void CloseWidget()
         {
             _visible = false;
-
-            // #region agent log
-            DdaDebugLog.Write(
-                "H8",
-                "TelemetrySurveyWidget.cs:CloseWidget:pre",
-                "CloseWidget pre-restore",
-                data: "cursorVisible=" + Cursor.visible +
-                      "; cursorLock=" + Cursor.lockState +
-                      "; currentEventSystem=" + (EventSystem.current != null ? EventSystem.current.name : "null") +
-                      "; currentEventSystemEnabled=" + (EventSystem.current != null && EventSystem.current.enabled) +
-                      "; " + DdaDebugLog.DumpEventSystems());
-            // #endregion
-
             RestoreCursorState();
             RestoreBackgroundEventSystem();
-
-            // #region agent log
-            DdaDebugLog.Write(
-                "H5",
-                "TelemetrySurveyWidget.cs:CloseWidget",
-                "SurveyWidget CloseWidget",
-                data: "quitAfterClose=" + _quitAfterClose + "; allowQuit=" + _allowQuit +
-                      "; cursorVisible=" + Cursor.visible +
-                      "; cursorLock=" + Cursor.lockState +
-                      "; currentEventSystem=" + (EventSystem.current != null ? EventSystem.current.name : "null") +
-                      "; currentEventSystemEnabled=" + (EventSystem.current != null && EventSystem.current.enabled));
-            // #endregion
         }
 
         private void ResetAnswers()
@@ -428,14 +381,6 @@ namespace GeneticsArtifact.Telemetry
             _previousCursorVisible = Cursor.visible;
             _previousCursorLockMode = Cursor.lockState;
             _savedCursorState = true;
-
-            // #region agent log
-            DdaDebugLog.Write(
-                "H8",
-                "TelemetrySurveyWidget.cs:RememberCursorState",
-                "Remembered cursor state",
-                data: "prevVisible=" + _previousCursorVisible + "; prevLock=" + _previousCursorLockMode);
-            // #endregion
         }
 
         private void RestoreCursorState()
@@ -445,28 +390,9 @@ namespace GeneticsArtifact.Telemetry
                 return;
             }
 
-            // #region agent log
-            DdaDebugLog.Write(
-                "H8",
-                "TelemetrySurveyWidget.cs:RestoreCursorState:pre",
-                "RestoreCursorState pre",
-                data: "willSetVisible=" + _previousCursorVisible +
-                      "; willSetLock=" + _previousCursorLockMode +
-                      "; currentVisible=" + Cursor.visible +
-                      "; currentLock=" + Cursor.lockState);
-            // #endregion
-
             Cursor.visible = _previousCursorVisible;
             Cursor.lockState = _previousCursorLockMode;
             _savedCursorState = false;
-
-            // #region agent log
-            DdaDebugLog.Write(
-                "H8",
-                "TelemetrySurveyWidget.cs:RestoreCursorState:post",
-                "RestoreCursorState post",
-                data: "currentVisible=" + Cursor.visible + "; currentLock=" + Cursor.lockState);
-            // #endregion
         }
 
         private void DisableBackgroundEventSystem()
@@ -484,15 +410,6 @@ namespace GeneticsArtifact.Telemetry
             }
 
             _savedEventSystemState = true;
-
-            // #region agent log
-            DdaDebugLog.Write(
-                "H5",
-                "TelemetrySurveyWidget.cs:DisableBackgroundEventSystem",
-                "Disabled background EventSystem",
-                data: "prev=" + (_previousEventSystem != null ? _previousEventSystem.name : "null") +
-                      "; prevEnabled=" + _previousEventSystemEnabled);
-            // #endregion
         }
 
         private void RestoreBackgroundEventSystem()
@@ -501,17 +418,6 @@ namespace GeneticsArtifact.Telemetry
             {
                 return;
             }
-
-            // #region agent log
-            DdaDebugLog.Write(
-                "H5",
-                "TelemetrySurveyWidget.cs:RestoreBackgroundEventSystem",
-                "Restored background EventSystem",
-                data: "prev=" + (_previousEventSystem != null ? _previousEventSystem.name : "null") +
-                      "; prevEnabledSaved=" + _previousEventSystemEnabled +
-                      "; current=" + (EventSystem.current != null ? EventSystem.current.name : "null") +
-                      "; willRestore=" + (EventSystem.current == null || EventSystem.current == _previousEventSystem));
-            // #endregion
 
             // Only restore if it's still the active EventSystem (or there is no active EventSystem).
             // Restoring an old MPEventSystem after returning to main menu can create multiple active

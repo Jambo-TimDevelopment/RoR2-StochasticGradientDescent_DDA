@@ -1,6 +1,5 @@
 using RoR2;
 using UnityEngine;
-using GeneticsArtifact.DdaDebug;
 using RoR2.UI;
 using UnityEngine.EventSystems;
 
@@ -45,14 +44,6 @@ namespace GeneticsArtifact.Telemetry
 
         internal static void NotifyRunBeginGameOver(GameEndingDef gameEndingDef)
         {
-            // #region agent log
-            DdaDebugLog.Write(
-                "H2",
-                "TelemetryRuntimeDriver.cs:NotifyRunBeginGameOver",
-                "Telemetry notified about BeginGameOver",
-                data: gameEndingDef != null ? ("ending=" + gameEndingDef.cachedName + "; isWin=" + gameEndingDef.isWin) : "ending=null");
-            // #endregion
-
             RequestSurvey(gameEndingDef != null && gameEndingDef.isWin ? "victory" : "game_over");
         }
 
@@ -204,19 +195,6 @@ namespace GeneticsArtifact.Telemetry
             Cursor.visible = true;
             Cursor.lockState = CursorLockMode.None;
 
-            // #region agent log
-            DdaDebugLog.Write(
-                "H6",
-                "TelemetryRuntimeDriver.cs:BaseMainMenuScreen_OnEnter",
-                "Main menu entered",
-                data: "pendingSurveySession=" + (_pendingSurveySession != null && !string.IsNullOrEmpty(_pendingSurveySession.SessionId)) +
-                      "; hasSubmitted=" + HasSubmittedSurvey +
-                      "; hasActiveSession=" + HasActiveSession +
-                      "; cursorVisible=" + Cursor.visible +
-                      "; cursorLock=" + Cursor.lockState +
-                      "; " + DdaDebugLog.DumpEventSystems());
-            // #endregion
-
             TryShowPendingSurveyFromMainMenu();
         }
 
@@ -253,14 +231,6 @@ namespace GeneticsArtifact.Telemetry
                     if (chosen == null && mp.Length > 0) chosen = mp[0];
                 }
 
-                // #region agent log
-                DdaDebugLog.Write(
-                    "H9",
-                    "TelemetryRuntimeDriver.cs:EnsureMpEventSystemForMainMenu:pre",
-                    "Ensure MPEventSystem for main menu",
-                    data: "chosen=" + (chosen != null ? chosen.name : "null") + "; " + DdaDebugLog.DumpEventSystems());
-                // #endregion
-
                 if (chosen != null && !chosen.enabled)
                 {
                     chosen.enabled = true;
@@ -281,19 +251,10 @@ namespace GeneticsArtifact.Telemetry
                     }
                 }
 
-                // #region agent log
-                DdaDebugLog.Write(
-                    "H9",
-                    "TelemetryRuntimeDriver.cs:EnsureMpEventSystemForMainMenu:post",
-                    "Ensure MPEventSystem done",
-                    data: DdaDebugLog.DumpEventSystems());
-                // #endregion
             }
             catch (System.Exception ex)
             {
-                // #region agent log
-                DdaDebugLog.Write("H9", "TelemetryRuntimeDriver.cs:EnsureMpEventSystemForMainMenu:catch", "Ensure MPEventSystem failed", data: ex.GetType().Name + ": " + ex.Message);
-                // #endregion
+                GeneticsArtifactPlugin.geneticLogSource?.LogWarning("[DDA] EnsureMpEventSystemForMainMenu failed: " + ex.GetType().Name + ": " + ex.Message);
             }
         }
 
@@ -309,14 +270,6 @@ namespace GeneticsArtifact.Telemetry
                 return;
             }
 
-            // #region agent log
-            DdaDebugLog.Write(
-                "H6",
-                "TelemetryRuntimeDriver.cs:TryShowPendingSurveyFromMainMenu",
-                "Showing pending survey from main menu",
-                data: "pendingReason=" + _pendingSurveyEndReason + "; sessionId=" + _pendingSurveySession.SessionId);
-            // #endregion
-
             RequestSurvey("pending_survey_main_menu");
         }
 
@@ -327,10 +280,6 @@ namespace GeneticsArtifact.Telemetry
             _sampleTimer = 0f;
             _flushTimer = 0f;
             _lastPlayerDeathAt = -1000f;
-
-            // #region agent log
-            DdaDebugLog.Write("H2", "TelemetryRuntimeDriver.cs:Awake", "TelemetryRuntimeDriver Awake");
-            // #endregion
 
             if (ConfigManager.telemetryEnabled.Value)
             {
@@ -381,26 +330,8 @@ namespace GeneticsArtifact.Telemetry
 
         private void OnDestroy()
         {
-            // #region agent log
-            DdaDebugLog.Write(
-                "H2",
-                "TelemetryRuntimeDriver.cs:OnDestroy",
-                "TelemetryRuntimeDriver OnDestroy",
-                data: "sessionId=" + _session.SessionId + "; pendingEndQueued=" + _session.HasSessionEndQueued);
-            // #endregion
-
             if (ConfigManager.telemetryEnabled.Value && !string.IsNullOrEmpty(_session.SessionId))
             {
-                // #region agent log
-                DdaDebugLog.Write(
-                    "H5",
-                    "TelemetryRuntimeDriver.cs:OnDestroy:branch",
-                    "TelemetryRuntimeDriver OnDestroy branch",
-                    data: "hasSurvey=" + _session.HasSurvey +
-                          "; hasSessionEndQueued=" + _session.HasSessionEndQueued +
-                          "; pluginInstance=" + (GeneticsArtifactPlugin.Instance != null));
-                // #endregion
-
                 if (_session.HasSurvey)
                 {
                     if (!_session.HasSessionEndQueued)
@@ -410,9 +341,6 @@ namespace GeneticsArtifact.Telemetry
                     }
                     if (GeneticsArtifactPlugin.Instance != null)
                     {
-                        // #region agent log
-                        DdaDebugLog.Write("H5", "TelemetryRuntimeDriver.cs:OnDestroy:flush", "Starting FlushQueuedEvents coroutine (hasSurvey)");
-                        // #endregion
                         GeneticsArtifactPlugin.Instance.StartCoroutine(PostHogBatchClient.FlushQueuedEvents());
                     }
                 }
@@ -421,9 +349,6 @@ namespace GeneticsArtifact.Telemetry
                     _pendingSurveySession = _session;
                     _pendingSurveyEndReason = "run_destroyed";
                     _pendingSessionEndQueued = false;
-                    // #region agent log
-                    DdaDebugLog.Write("H5", "TelemetryRuntimeDriver.cs:OnDestroy:requestSurvey", "RequestSurvey(run_destroyed) from OnDestroy");
-                    // #endregion
                     // Do NOT show the survey UI during Run teardown. It can happen while UI/EventSystem
                     // is being rebuilt, and has been correlated with repeat-run lobby instability.
                     // The pending survey will be shown on main menu enter.

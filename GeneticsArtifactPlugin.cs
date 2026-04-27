@@ -2,7 +2,6 @@ using BepInEx;
 using BepInEx.Bootstrap;
 using BepInEx.Logging;
 using GeneticsArtifact.CheatManager;
-using GeneticsArtifact.DdaDebug;
 using GeneticsArtifact.SgdEngine;
 using GeneticsArtifact.SgdEngine.Actuators;
 using GeneticsArtifact.Telemetry;
@@ -45,16 +44,6 @@ namespace GeneticsArtifact
             ArtifactOfGenetics.Init();
             GeneTokens.Init();
 
-            // #region agent log
-            DdaDebugLog.Write(
-                hypothesisId: "H1",
-                location: "GeneticsArtifactPlugin.cs:Awake",
-                message: "Plugin Awake",
-                data: "SGD=" + ConfigManager.diagnosticsEnableSgdHooks.Value +
-                      "; Telemetry=" + ConfigManager.diagnosticsEnableTelemetryHooks.Value +
-                      "; Rotator=" + ConfigManager.diagnosticsEnableRunModeRotatorHooks.Value);
-            // #endregion
-
             geneticLogSource?.LogInfo(
                 "[DDA] Diagnostics flags: " +
                 "GeneTokenCalc=" + ConfigManager.diagnosticsEnableGeneTokenCalcHooks.Value +
@@ -88,9 +77,6 @@ namespace GeneticsArtifact
             {
                 DdaRunModeRotator.RegisterHooks();
             }
-
-            // Always-on crash probe (logs only; does not change behavior).
-            DdaLobbyCrashProbe.RegisterHooks();
 
             foreach (PluginInfo plugin in Chainloader.PluginInfos.Values) { if (plugin.Metadata.GUID.Equals("com.rune580.riskofoptions")) { RiskOfOptionsCompat.Init(); break; } }
         }
