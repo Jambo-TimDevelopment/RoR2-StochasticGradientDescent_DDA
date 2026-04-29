@@ -8,12 +8,23 @@ namespace GeneticsArtifact.Telemetry
 
         private static readonly Queue<TelemetryEvent> Events = new Queue<TelemetryEvent>(128);
         private static List<TelemetryEvent> _lastBatch;
+        private static TelemetryEvent _lastEnqueuedEvent;
+        private static TelemetryEvent _lastEnqueuedSample;
 
         public static int Count => Events.Count;
+
+        public static TelemetryEvent LastEnqueuedEvent => _lastEnqueuedEvent;
+        public static TelemetryEvent LastEnqueuedSample => _lastEnqueuedSample;
 
         public static void Enqueue(TelemetryEvent telemetryEvent)
         {
             if (telemetryEvent == null) return;
+
+            _lastEnqueuedEvent = telemetryEvent;
+            if (telemetryEvent.EventName == "dda_sample")
+            {
+                _lastEnqueuedSample = telemetryEvent;
+            }
 
             int maxQueueSize = ConfigManager.telemetryMaxQueueSize?.Value ?? 512;
             maxQueueSize = UnityEngine.Mathf.Clamp(maxQueueSize, 32, 5000);

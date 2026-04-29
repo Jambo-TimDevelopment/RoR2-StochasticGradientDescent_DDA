@@ -276,7 +276,7 @@ namespace GeneticsArtifact
 
             diagnosticsEnableRunModeRotatorHooks = configFile.Bind<bool>(
                 new ConfigDefinition("Diagnostics", "Enable Research Rotator Hooks"),
-                false,
+                true,
                 new ConfigDescription("Enable research run mode rotator hooks. Keep disabled while diagnosing repeat-run startup errors."));
         }
 

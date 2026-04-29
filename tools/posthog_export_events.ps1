@@ -16,6 +16,48 @@ $ErrorActionPreference = "Stop"
 function Write-Info([string]$msg) { Write-Host "[posthog_export_events] $msg" }
 function Write-Warn([string]$msg) { Write-Warning "[posthog_export_events] $msg" }
 
+function Ensure-Tls12() {
+  # Windows PowerShell 5.x on older .NET Framework may not default to TLS 1.2.
+  try {
+    $sp = [Net.ServicePointManager]::SecurityProtocol
+    $tls12 = [Net.SecurityProtocolType]::Tls12
+    if (($sp -band $tls12) -eq 0) {
+      [Net.ServicePointManager]::SecurityProtocol = $sp -bor $tls12
+    }
+  } catch {}
+}
+
+function Get-ErrorBodyFromException($ex) {
+  try {
+    if ($null -eq $ex -or $null -eq $ex.Response) { return $null }
+    $resp = $ex.Response
+    $stream = $resp.GetResponseStream()
+    if ($null -eq $stream) { return $null }
+    $reader = New-Object System.IO.StreamReader($stream)
+    $body = $reader.ReadToEnd()
+    if ([string]::IsNullOrWhiteSpace($body)) { return $null }
+    return $body
+  } catch {
+    return $null
+  }
+}
+
+function Resolve-NextUrl([string]$n, [string]$apiHost, [string]$baseUrl) {
+  if ([string]::IsNullOrWhiteSpace($n)) { return $null }
+  $n = [string]$n
+
+  if ($n -match '^https?://') { return $n }
+  if ($n -like '/*') { return "$apiHost$n" }
+
+  # Some PostHog responses (or proxies) may return just a query string:
+  #   "?limit=200&offset=200" or "limit=200&offset=200"
+  if ($n.StartsWith("?")) { return "$baseUrl$n" }
+  if ($n -match '(^|&)limit=\d+') { return "$baseUrl?$n" }
+
+  # Fallback: treat as relative to base if it doesn't look like a URI.
+  return $n
+}
+
 function Try-LoadSecrets([string]$path) {
   try {
     if ([string]::IsNullOrWhiteSpace($path) -or -not (Test-Path $path)) { return $null }
@@ -72,6 +114,8 @@ if ($Limit -lt 1 -or $Limit -gt 1000) {
   exit 1
 }
 
+Ensure-Tls12
+
 $ApiHost = $ApiHost.Trim().Trim('"').Trim("'").TrimEnd("/")
 $base = "$ApiHost/api/projects/$ProjectId/events/"
 
@@ -81,7 +125,7 @@ if (-not [string]::IsNullOrWhiteSpace($Event)) { $qs.Add("event=$([System.Uri]::
 if (-not [string]::IsNullOrWhiteSpace($After)) { $qs.Add("after=$([System.Uri]::EscapeDataString($After))") | Out-Null }
 if (-not [string]::IsNullOrWhiteSpace($Before)) { $qs.Add("before=$([System.Uri]::EscapeDataString($Before))") | Out-Null }
 
-$nextUrl = "$base?$(($qs -join '&'))"
+$nextUrl = "${base}?$(($qs -join '&'))"
 
 if ([string]::IsNullOrWhiteSpace($OutPath)) {
   $exportDir = Join-Path $PSScriptRoot "posthog_exports"
@@ -136,17 +180,7 @@ try {
       }
     }
 
-    $n = $resp.next
-    if ($null -eq $n -or [string]::IsNullOrWhiteSpace([string]$n)) {
-      $nextUrl = $null
-    } elseif ([string]$n -match '^https?://') {
-      $nextUrl = [string]$n
-    } elseif ([string]$n -like '/*') {
-      $nextUrl = "$ApiHost$([string]$n)"
-    } else {
-      # Unexpected format; try to treat as absolute.
-      $nextUrl = [string]$n
-    }
+    $nextUrl = Resolve-NextUrl -n ([string]$resp.next) -apiHost $ApiHost -baseUrl $base
 
     if ($page -ge 1 -and ($written -gt 0) -and ($page % 10 -eq 0)) {
       Write-Info "Progress: $written events written so far"
@@ -158,6 +192,8 @@ catch {
   if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
     Write-Host ("[ERROR] HTTP status: " + [int]$_.Exception.Response.StatusCode)
   }
+  $body = Get-ErrorBodyFromException $_.Exception
+  if ($body) { Write-Host "[ERROR] HTTP body: $body" }
   throw
 }
 finally {

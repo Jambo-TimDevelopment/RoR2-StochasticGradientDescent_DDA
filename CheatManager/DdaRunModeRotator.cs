@@ -16,9 +16,47 @@ namespace GeneticsArtifact.CheatManager
 
         public static void RegisterHooks()
         {
-            // Temporarily disabled while investigating repeat-run lobby startup failures.
-            // Keep this class intact so rotation/seed diagnostics can be restored safely.
-            GeneticsArtifactPlugin.geneticLogSource?.LogInfo("[DDA] Research run mode rotator disabled for repeat-start diagnostics.");
+            On.RoR2.PreGameController.StartRun += PreGameController_StartRun;
+            GeneticsArtifactPlugin.geneticLogSource?.LogInfo("[DDA] Research run mode rotator enabled (PreGameController.StartRun).");
+        }
+
+        private static void PreGameController_StartRun(On.RoR2.PreGameController.orig_StartRun orig, PreGameController self)
+        {
+            try
+            {
+                if (NetworkServer.active && ConfigManager.researchAutoRotateDdaAlgorithms.Value)
+                {
+                    string lastAlgorithm = Normalize(ConfigManager.researchLastRunDdaAlgorithm.Value);
+                    DdaAlgorithmType next = GetNextAlgorithm(lastAlgorithm);
+                    DdaAlgorithmState.Activate(next);
+
+                    string telemetryMode = DdaAlgorithmState.GetTelemetryMode();
+                    string configuredSeed = SelectConfiguredSeed(lastAlgorithm, telemetryMode);
+
+                    ConfigManager.researchLastRunDdaAlgorithm.Value = telemetryMode;
+                    ConfigManager.telemetryConfiguredRunSeed.Value = configuredSeed;
+                    ConfigManager.Save();
+
+                    LogSeedSelection(lastAlgorithm, telemetryMode, configuredSeed);
+
+                    if (!string.IsNullOrWhiteSpace(configuredSeed))
+                    {
+                        ApplyConfiguredRunSeed(self, configuredSeed);
+                    }
+
+                    GeneticsArtifactPlugin.geneticLogSource?.LogInfo(
+                        "[DDA] Research run mode selected (StartRun): " + telemetryMode +
+                        (string.IsNullOrWhiteSpace(configuredSeed) ? "" : ", planned_seed=" + configuredSeed));
+                }
+            }
+            catch (Exception ex)
+            {
+                GeneticsArtifactPlugin.geneticLogSource?.LogWarning(
+                    "[DDA] PreGameController.StartRun rotator hook failed; falling back to vanilla StartRun. Error: " +
+                    ex.GetType().Name + ": " + ex.Message);
+            }
+
+            orig(self);
         }
 
         private static void Run_Start(On.RoR2.Run.orig_Start orig, Run self)

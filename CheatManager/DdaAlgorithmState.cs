@@ -20,6 +20,12 @@ namespace GeneticsArtifact.CheatManager
         /// </summary>
         public static bool IsDebugOverlayEnabled { get; set; }
 
+        /// <summary>
+        /// Whether the telemetry overlay is visible on screen.
+        /// Shows the last telemetry payload enqueued/sent to PostHog.
+        /// </summary>
+        public static bool IsTelemetryOverlayEnabled { get; set; }
+
         public static void Activate(DdaAlgorithmType algorithm)
         {
             ActiveAlgorithm = algorithm;

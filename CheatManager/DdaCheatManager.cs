@@ -98,6 +98,25 @@ namespace GeneticsArtifact.CheatManager
             Debug.Log($"[DDA] Debug overlay: {(DdaAlgorithmState.IsDebugOverlayEnabled ? "ENABLED" : "DISABLED")}");
         }
 
+        [ConCommand(commandName = "dda_telemetry_overlay", helpText = "Toggle telemetry overlay (last enqueued dda_sample). Usage: dda_telemetry_overlay [0|1]")]
+        private static void OnTelemetryOverlayToggle(ConCommandArgs args)
+        {
+            if (args.Count > 0)
+            {
+                if (int.TryParse(args[0], out int value))
+                {
+                    DdaAlgorithmState.IsTelemetryOverlayEnabled = value != 0;
+                }
+            }
+            else
+            {
+                DdaAlgorithmState.IsTelemetryOverlayEnabled = !DdaAlgorithmState.IsTelemetryOverlayEnabled;
+            }
+
+            TelemetryDebugOverlayBehaviour.UpdateVisibility();
+            Debug.Log($"[DDA] Telemetry overlay: {(DdaAlgorithmState.IsTelemetryOverlayEnabled ? "ENABLED" : "DISABLED")}");
+        }
+
         [ConCommand(commandName = "dda_param", helpText = "Change DDA parameters (placeholder). Usage: dda_param [param_name] [value]")]
         private static void OnParamCommand(ConCommandArgs args)
         {

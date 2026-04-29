@@ -7,6 +7,7 @@ import os
 import random
 import statistics
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 
 
 def _iter_jsonl(path: str):
@@ -184,6 +185,20 @@ def _to_int(v):
         return None
 
 
+def _parse_iso_ts(s: str) -> datetime | None:
+    """
+    Parses PostHog timestamp like '2026-04-27T18:53:28.386000+00:00'.
+    Returns timezone-aware datetime in UTC (or the timestamp's own tz).
+    """
+    if not s:
+        return None
+    try:
+        # Python 3.11: supports "+00:00" offsets.
+        return datetime.fromisoformat(str(s))
+    except Exception:
+        return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Aggregate PostHog JSONL telemetry to session metrics for hypotheses H1-H4."
@@ -227,6 +242,27 @@ def main() -> int:
         default=0,
         help="Exclude sessions with fewer axis observations.",
     )
+    ap.add_argument(
+        "--only-mode",
+        default="",
+        help="Restrict analysis to sessions with this dda_mode (e.g. SGD).",
+    )
+    ap.add_argument(
+        "--last-minutes",
+        type=int,
+        default=0,
+        help="Restrict analysis to sessions whose latest event timestamp is within the last N minutes (UTC).",
+    )
+    ap.add_argument(
+        "--since-iso",
+        default="",
+        help="Restrict analysis to sessions whose latest event timestamp is >= this ISO timestamp (e.g. 2026-04-27T18:00:00+00:00).",
+    )
+    ap.add_argument(
+        "--until-iso",
+        default="",
+        help="Restrict analysis to sessions whose latest event timestamp is <= this ISO timestamp (default: now, UTC).",
+    )
     args = ap.parse_args()
 
     files: list[str] = []
@@ -267,6 +303,7 @@ def main() -> int:
     sess_player_body: dict[str, str] = {}
     prev_axis_signals: dict[tuple[str, str], tuple[float, float]] = {}
     prev_axis_multiplier: dict[tuple[str, str], float] = {}
+    sess_latest_ts: dict[str, datetime] = {}
 
     bad_json_lines = 0
     seen_events = 0
@@ -288,6 +325,12 @@ def main() -> int:
             session_id = props.get("session_id")
             if not session_id:
                 continue
+
+            ts = _parse_iso_ts(obj.get("timestamp") or "")
+            if ts is not None:
+                prev = sess_latest_ts.get(session_id)
+                if prev is None or ts > prev:
+                    sess_latest_ts[session_id] = ts
 
             dda_mode = props.get("dda_mode") or ""
             if dda_mode and not sess_mode.get(session_id):
@@ -559,6 +602,31 @@ def main() -> int:
 
     if args.min_axis_obs > 0:
         sessions = [s for s in sessions if s.axis_obs_count >= args.min_axis_obs]
+
+    if args.only_mode:
+        wanted = args.only_mode.strip()
+        sessions = [s for s in sessions if (s.dda_mode or "").strip() == wanted]
+
+    # Time filtering by session latest timestamp
+    since_dt = _parse_iso_ts(args.since_iso) if args.since_iso else None
+    until_dt = _parse_iso_ts(args.until_iso) if args.until_iso else None
+    if until_dt is None:
+        until_dt = datetime.now(timezone.utc)
+    if args.last_minutes and args.last_minutes > 0:
+        since_dt = until_dt - timedelta(minutes=int(args.last_minutes))
+
+    if since_dt is not None or until_dt is not None:
+        def _in_window(s: SessionMetrics) -> bool:
+            ts = sess_latest_ts.get(s.session_id)
+            if ts is None:
+                return False
+            if since_dt is not None and ts < since_dt:
+                return False
+            if until_dt is not None and ts > until_dt:
+                return False
+            return True
+
+        sessions = [s for s in sessions if _in_window(s)]
 
     out_dir = os.path.normpath(args.out_dir)
     os.makedirs(out_dir, exist_ok=True)
