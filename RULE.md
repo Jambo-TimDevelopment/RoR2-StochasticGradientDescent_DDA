@@ -21,9 +21,9 @@ Sensors (метрики игрока) → Decision module (SGD) → Actuators (�
 
 ---
 
-## Термины и модель сложности (Schreiber)
+## Термины и модель сложности (Project Horseshoe)
 
-Используем модель **воспринимаемой сложности**:
+Используем модель **воспринимаемой сложности** в терминах материалов **Project Horseshoe** ([сайт](https://www.projecthorseshoe.com/), [архив отчётов](https://www.projecthorseshoe.com/reports/)):
 
 \[
 C = (V_c + S_c) - (V_p + S_p)

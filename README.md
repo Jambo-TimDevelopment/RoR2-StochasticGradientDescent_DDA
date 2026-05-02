@@ -7,6 +7,7 @@
 - **Reference algorithm**: genetic algorithm (`GeneticEngine/`) that evolves monster stats based on player performance.
 - **Target algorithm (this thesis)**: **SGD-based DDA** (`SgdEngine/`), built around the pipeline **Sensors → Decision (SGD) → Actuators**.
 - **Main idea**: continuously adapt monster stats (HP, damage, movement and attack speed) so that the game stays challenging but fair.
+- **Difficulty framing**: perceived difficulty uses the **Project Horseshoe** variables *virtual challenge / skill of player* (*V_c*, *S_c*, *V_p*, *S_p*) — see [projecthorseshoe.com](https://www.projecthorseshoe.com/) and the [reports archive](https://www.projecthorseshoe.com/reports/).
 
 For detailed architecture and math of the SGD DDA see:
 
@@ -34,7 +35,7 @@ Sensors (метрики игрока) → Decision module (SGD) → Actuators (�
 
 ## Модель сложности (кратко)
 
-В качестве теоретической основы используется модель **воспринимаемой сложности** (по Schreiber):
+В качестве теоретической основы используется модель **воспринимаемой сложности** в терминах **Project Horseshoe** (игровой дизайн‑воркшоп: [projecthorseshoe.com](https://www.projecthorseshoe.com/), [архив отчётов](https://www.projecthorseshoe.com/reports/)):
 
 \\[
 C = (V_c + S_c) - (V_p + S_p)
