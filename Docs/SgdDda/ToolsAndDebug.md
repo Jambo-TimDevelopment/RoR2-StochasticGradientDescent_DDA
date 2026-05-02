@@ -1,66 +1,18 @@
 ## Инструменты и отладка SGD DDA
 
-Этот документ описывает, как управлять SGD‑алгоритмом в рантайме, какие есть точки входа для отладки и как интерпретировать его поведение.
+Как управлять SGD в рантайме, где смотреть состояние и как связаны отладка с телеметрией. Теория **четырёх осей**, команды `dda_sgd_axis_*` и поля `axis_*` — в [`Axes.md`](Axes.md).
 
 ### Управление алгоритмом и сброс состояния
 
-Выбор активного алгоритма DDA вынесен в общий модуль состояния:
+Режим DDA задаёт `DdaAlgorithmState.ActiveAlgorithm` (`Fixed`, `Genetic`, `Sgd`); переключение — `Activate(...)`. Флаг `IsGeneticAlgorithmEnabled` сохраняет ожидания для GA; `IsDebugOverlayEnabled` включает overlay и сбор телеметрии независимо от того, выбран ли сейчас SGD.
 
-- `DdaAlgorithmState.ActiveAlgorithm` — перечисление, задающее текущий алгоритм:
-  - `DdaAlgorithmType.Fixed`
-  - `DdaAlgorithmType.Genetic`
-  - `DdaAlgorithmType.Sgd`
-- `DdaAlgorithmState.Activate(...)` — единая точка переключения режима DDA.
-- `DdaAlgorithmState.IsGeneticAlgorithmEnabled` — флаг для обратной совместимости с исходным поведением GA.
-- `DdaAlgorithmState.IsDebugOverlayEnabled` — флаг включения отладочного overlay и сбора телеметрии даже при неактивном SGD.
-
-При включении SGD‑режима важно корректно сбрасывать состояние:
-
-- **Сброс при старте забега**:
-  - В `SgdRuntimeDriver.Run_Start` вызываются:
-    - `SgdDecisionRuntimeState.Reset();`
-    - `SgdActuatorsRuntimeState.Reset();`
-    - `SgdActuatorsApplier.ApplyToAllLivingMonsters();`
-- **Сброс при смене активного тела игрока**:
-  - `SgdSensorsHooks.Reset(newPlayerBody)` сбрасывает:
-    - отслеживаемое тело игрока;
-    - внутреннее состояние `SgdSensorsEstimator`;
-    - `SgdSensorsRuntimeState`.
-- **Ручной сброс для отладки** (на уровне кода или консольных команд):
-  - `SgdRuntimeState.Clear();`
-  - `SgdSensorsRuntimeState.Clear();`
-  - `SgdDecisionRuntimeState.Reset();`
-  - `SgdActuatorsRuntimeState.Reset();`
-
-Рекомендуется группировать эти вызовы в одну консольную команду/чит для «жёсткого» перезапуска SGD‑алгоритма без рестарта забега.
+При старте забега `SgdRuntimeDriver.Run_Start` сбрасывает `SgdDecisionRuntimeState` и `SgdActuatorsRuntimeState` и сразу прогоняет `SgdActuatorsApplier.ApplyToAllLivingMonsters()`. При смене тела игрока `SgdSensorsHooks.Reset` обнуляет отслеживаемое тело, внутренности `SgdSensorsEstimator` и `SgdSensorsRuntimeState`. Для «жёсткого» ресета без нового забега вручную можно вызвать `SgdRuntimeState.Clear`, `SgdSensorsRuntimeState.Clear`, `SgdDecisionRuntimeState.Reset`, `SgdActuatorsRuntimeState.Reset` — удобно обернуть одной консольной командой.
 
 ### Использование CheatManager и консольных команд
 
-Пространство имён `GeneticsArtifact.CheatManager` используется для интеграции с консолью RoR2 и тестовыми инструментами мода.
+`GeneticsArtifact.CheatManager` подключает консоль RoR2. Примеры: `dda_algorithm fixed|genetic|sgd` (синонимы `fls`, `ga`); принудительное `SgdActuatorsApplier.ApplyToAllLivingMonsters()` после ручной правки множителей; вывод в лог `VirtualPower`, `SgdSensorsRuntimeState.Sample`, множителей и \(\theta\)/velocity из `SgdDecisionRuntimeState`. Полный список и оси — `CheatManager/README.md` и [`Axes.md`](Axes.md).
 
-Типичные сценарии, которые удобно оборачивать в команды:
-
-- **Переключение алгоритма DDA**:
-  - `dda_algorithm fixed|genetic|sgd` (синонимы: `fls`, `ga`).
-- **Принудительное обновление актуаторов**:
-  - команда, которая вызывает `SgdActuatorsApplier.ApplyToAllLivingMonsters()` для моментального применения текущих множителей после ручной корректировки.
-- **Диагностика состояний**:
-  - команда, печатающая в лог:
-    - текущее значение виртуальной мощности игрока (`SgdRuntimeState.VirtualPower`);
-    - основные поля `SgdSensorsRuntimeState.Sample`;
-    - значения множителей из `SgdActuatorsRuntimeState`;
-    - параметры \\( \\theta \\) и velocity из `SgdDecisionRuntimeState`.
-
-Конкретные имена команд зависят от того, как уже устроен ваш `CheatManager`. При добавлении новых команд важно не нарушать существующую структуру и придерживаться стиля остальных читов мода.
-
-Дополнительно для экспериментов:
-
-- **Анкета H5/H6 из консоли**:
-  - `dda_survey <fairness 1-7> <continuity 1-7> [comment]`
-  - отправляет событие `dda_post_session_survey`.
-
-- **Шаг SGD по времени боя**:
-  - `dda_sgd_step_time [seconds]`
+Для экспериментов: `dda_survey <fairness 1-7> <continuity 1-7> [comment]` → `dda_post_session_survey`; `dda_sgd_step_time [seconds]` — интервал накопления боя между шагами SGD.
 
 ### Debug‑overlay и визуализация
 
@@ -180,14 +132,7 @@ Overlay удобно реализовать как простой текстов
 
 ### H1-H4: протокол проверки и метрики
 
-Начиная с телеметрии `telemetry_schema_version = 3`, проверка H1-H4 строится на сессионных агрегатах и четырех фиксированных плоскостях сложности:
-
-- `damage` -> `GeneStat.AttackDamage`;
-- `attackSpeed` -> `GeneStat.AttackSpeed`;
-- `hp` -> `GeneStat.MaxHealth`;
-- `moveSpeed` -> `GeneStat.MoveSpeed`.
-
-Каждой плоскости соответствует ровно один актуатор. Нельзя напрямую смешивать `damage`, `attackSpeed`, `hp`, `regen`, `moveSpeed` в один показатель мощности и сравнивать его с общим показателем сложности монстров. `regen` допускается использовать только как вспомогательный компонент оценки выживаемости внутри плоскости `hp`, но не как отдельную пятую плоскость.
+Начиная с `telemetry_schema_version = 3`, H1–H4 опираются на сессионные агрегаты и четыре плоскости: `damage` ↔ `AttackDamage`, `attackSpeed` ↔ `AttackSpeed`, `hp` ↔ `MaxHealth`, `moveSpeed` ↔ `MoveSpeed`. У каждой — один актуатор; смешивать их в один скаляр «сложности монстров» для сравнения с \(V_p\) нельзя. `regen` только как вспомогательный сигнал внутри `hp`, не как пятая ось. Соответствие полей `axis_*` и весов skill — [`Axes.md`](Axes.md).
 
 #### Качество сессии
 

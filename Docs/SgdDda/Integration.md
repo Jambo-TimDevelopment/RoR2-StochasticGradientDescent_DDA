@@ -1,95 +1,28 @@
 ## Практическая интеграция SGD DDA
 
-Этот документ описывает, как SGD‑алгоритм встраивается в игровой цикл RoR2, как он сосуществует с генетическим алгоритмом и как практически использовать его в моде.
+Документ описывает встраивание SGD в цикл RoR2, сосуществование с GA и практическое использование. **Четыре оси множителей** (`MaxHealth`, `MoveSpeed`, `AttackSpeed`, `AttackDamage`), консольные переключатели `dda_sgd_axis_*`, ключи BepInEx `sgd*Floor`/`sgd*Cap` и связь с \(V_c\) — в [`Axes.md`](Axes.md).
 
 ### Связь с артефактом и состоянием DDA
 
-Основная точка интеграции SGD DDA с модом — модуль состояния DDA:
+Главная точка входа — `DdaAlgorithmState`. Поле `ActiveAlgorithm` выбирает режим: `Fixed` (FLS для сравнения), `Genetic` (исходный GA) или `Sgd`. Переключение — `Activate(DdaAlgorithmType)`. `IsGeneticAlgorithmEnabled` сохраняет ожидаемое поведение артефакта Genetics; `ShouldRunGeneticEngine()` решает, крутить ли GA; `IsDebugOverlayEnabled` позволяет собирать сенсоры и телеметрию даже без активного SGD.
 
-- `DdaAlgorithmState`:
-  - `ActiveAlgorithm` — перечисление, выбирающее текущий алгоритм:
-    - `Fixed` — фиксированная сложность (FLS) для сравнительного режима.
-    - `Genetic` — используется исходный генетический алгоритм.
-    - `Sgd` — включается SGD DDA.
-  - `Activate(DdaAlgorithmType)` — единая точка переключения режима DDA.
-  - `IsGeneticAlgorithmEnabled` — флаг, отражающий первоначальное поведение артефакта Genetics.
-  - `ShouldRunGeneticEngine()` — предикат запуска генетического движка (GA).
-  - `IsDebugOverlayEnabled` — включает сбор телеметрии и отладочный overlay независимо от выбора алгоритма.
-
-SGD DDA **не меняет** правила включения артефакта в игре:
-
-- артефакт Genetics по‑прежнему включается стандартным для мода способом (см. описание в [`RULE.md`](../../RULE.md));
-- выбор между Genetic и SGD управляется только через `DdaAlgorithmState.ActiveAlgorithm` и/или консольные команды, построенные поверх него.
+Правила включения артефакта в забеге те же, что в [`RULE.md`](../../RULE.md): SGD не подменяет условия появления Genetics. Выбор GA vs SGD — только через `ActiveAlgorithm` и команды поверх него.
 
 ### Интеграция с жизненным циклом RoR2
 
-SGD DDA встроен в типичные события движка RoR2:
+На **`Run.Start`** (`SgdRuntimeDriver.Run_Start`) сбрасываются `SgdDecisionRuntimeState` и `SgdActuatorsRuntimeState`, множители применяются ко всем живым монстрам, на `Run` вешается `SgdRuntimeDriver`.
 
-- **Старт забега**:
-  - Хук: `On.RoR2.Run.Start` в `SgdRuntimeDriver.Run_Start`.
-  - Действия:
-    - сброс состояний SGD:
-      - `SgdDecisionRuntimeState.Reset();`
-      - `SgdActuatorsRuntimeState.Reset();`
-    - начальное применение множителей ко всем живым монстрам:
-      - `SgdActuatorsApplier.ApplyToAllLivingMonsters();`
-    - добавление компонента `SgdRuntimeDriver` на объект `Run`.
+На **`CharacterBody.Start`** (`SgdActuatorsHooks`) при `NetworkServer.active`, режиме `Sgd`, команде монстров и наличии `inventory` к телу применяются четыре множителя через `SgdGeneStatTokenApplier` и `RecalculateStats()`.
 
-- **Появление тела (`CharacterBody.Start`)**:
-  - Хук: `On.RoR2.CharacterBody.Start` в `SgdActuatorsHooks`.
-  - Условия:
-    - сервер активен (`NetworkServer.active`);
-    - выбран алгоритм `DdaAlgorithmType.Sgd`;
-    - тело принадлежит команде монстров (`teamIndex == TeamIndex.Monster`);
-    - у тела есть `inventory`.
-  - Действие:
-    - применение актуальных множителей через `SgdGeneStatTokenApplier.ApplyMultiplier(...)` к `GeneStat.MaxHealth`, `MoveSpeed`, `AttackSpeed`, `AttackDamage`;
-    - вызов `RecalculateStats()` для обновления характеристик.
-
-- **Урон (`HealthComponent.TakeDamage`)**:
-  - Хук: `On.RoR2.HealthComponent.TakeDamage` в `SgdSensorsHooks`.
-  - Используется для:
-    - учёта входящего урона по отслеживаемому игроку;
-    - учёта исходящего урона от игрока по монстрам.
-
-- **Смерть тела (`CharacterBody.OnDestroy`)**:
-  - Хук: `On.RoR2.CharacterBody.OnDestroy` в `SgdSensorsHooks`.
-  - Используется для:
-    - регистрации смерти игрока (для DeathsPerWindow);
-    - регистрации смерти монстров (для расчёта TTK).
-
-Таким образом, SGD DDA аккуратно «подписан» на основные игровые события и не требует изменения существующего геймплея RoR2.
+**`HealthComponent.TakeDamage`** в `SgdSensorsHooks` кормит сенсоры входящим уроном по игроку и исходящим по монстрам. **`CharacterBody.OnDestroy`** фиксирует смерти игрока (окна смертей) и монстров (TTK). Отдельные хуки не меняют базовый геймплей RoR2.
 
 ### Интеграция с GeneticEngine
 
-SGD DDA максимально изолирован от уже существующего `GeneticEngine/`:
-
-- **Запрещено** вносить изменения в ключевые классы генетического алгоритма (см. правила в `RULE.md`):
-  - `GeneEngineDriver`
-  - `MasterGeneBehaviour`
-  - `MonsterGeneBehaviour`
-  - `GeneTokenCalc`
-  - `GeneTokens`
-- Вместо этого SGD использует:
-  - те же `GeneStat`, что и генетический алгоритм;
-  - собственный вспомогательный класс `SgdGeneStatTokenApplier`, который:
-    - добавляет/изменяет токены в инвентаре монстров;
-    - управляет мультипликаторами через те же механизмы, что и GA.
-
-Преимущества такого подхода:
-
-- **Совместимость**: оба алгоритма работают поверх одного и того же механизма генов и токенов.
-- **Изоляция**: изменения в SGD‑логике не ломают GeneticEngine и наоборот.
-- **Простота экспериментов**: можно легко включать/выключать SGD и сравнивать поведение с исходным артефактом.
+По [`RULE.md`](../../RULE.md) не следует править `GeneEngineDriver`, `MasterGeneBehaviour`, `MonsterGeneBehaviour`, `GeneTokenCalc`, `GeneTokens` ради SGD. Общий слой — те же `GeneStat` и токены; SGD пишет множители через `SgdGeneStatTokenApplier`. Так сохраняются совместимость с артефактом, изоляция кода GA и простое A/B переключение режимов.
 
 ### Сетевой аспект
 
-Как и остальные элементы мода, SGD DDA учитывает сетевой контекст:
-
-- Все критические изменения (`SgdDecisionDriver.Tick`, применение актуаторов) выполняются только при `NetworkServer.active == true`.
-- Это гарантирует, что:
-  - адаптация сложности происходит на стороне сервера;
-  - состояние сложности консистентно для всех клиентов.
+`SgdDecisionDriver.Tick` и применение актуаторов выполняются при `NetworkServer.active`, чтобы адаптация и множители были едины для всех клиентов.
 
 ### Деплой и использование
 
@@ -105,37 +38,13 @@ SGD DDA максимально изолирован от уже существу
   - `ROR2_PLUGINS_PATH`
   - `ROR2_GAME_PATH` / `ROR2_DIR` / `ROR2_PATH`
 
-После установки:
-
-1. Запустите игру с модом.
-2. Включите артефакт Genetics обычным способом.
-3. Выберите SGD‑режим:
-   - через `DdaAlgorithmState.ActiveAlgorithm` (если есть соответствующая настройка/меню);
-   - или через консольную команду CheatManager, переключающую алгоритм на `Sgd`.
-4. При необходимости включите debug‑overlay (`DdaAlgorithmState.IsDebugOverlayEnabled`), чтобы:
-   - убедиться, что сенсоры и решение работают;
-   - наблюдать за эволюцией множителей и соотношением skill/challenge.
+После установки: запустить игру с модом, включить Genetics как обычно, переключить DDA на SGD через настройки/меню или консоль CheatManager. Для диагностики — `DdaAlgorithmState.IsDebugOverlayEnabled` (сенсоры, множители, skill/challenge по осям; см. [`Axes.md`](Axes.md)).
 
 ### Research rotation (FLS → GA → SGD)
 
-Для экспериментальной серии поддерживается авто‑ротация режимов на старте каждого нового забега:
-
-- файл: `CheatManager/DdaRunModeRotator.cs`
-- конфиги:
-  - `Research DDA Rotation / Auto Rotate Algorithms`
-  - `Research DDA Rotation / Last Run Algorithm`
-
-Это помогает получать сопоставимые сессии по режимам без ручного переключения.
+`CheatManager/DdaRunModeRotator.cs` и конфиги **Research DDA Rotation** (`Auto Rotate Algorithms`, `Last Run Algorithm`) задают автосмену режима на старте забега для сопоставимых сессий.
 
 ### Рекомендации по дальнейшей интеграции
 
-- **UI/настройки**:
-  - добавить в опции мода (например, через Risk of Options) переключатель алгоритма DDA;
-  - вынести ключевые гиперпараметры SGD (learning rate, momentum, клиппинг, лимиты осей) в конфиг для экспериментов.
-- **Исследование (NIR)**:
-  - использовать логи и overlay для сбора датасетов:
-    - запись временных рядов (сенсоры, множители, статусы боя);
-  - анализировать эти данные вне игры для:
-    - подбора оптимальных гиперпараметров;
-    - подтверждения того, что SGD действительно стабилизирует баланс сложности.
+Имеет смысл вынести переключение алгоритма DDA в UI (например Risk of Options) и по мере необходимости расширять конфиг гиперпараметрами SGD; для NIR — логи, PostHog и overlay как источники временных рядов по осям и сенсорам.
 
