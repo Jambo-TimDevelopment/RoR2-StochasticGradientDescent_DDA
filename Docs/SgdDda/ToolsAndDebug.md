@@ -1,6 +1,151 @@
+**Languages:** [English](#english) · [Русский](#russian)
+
+---
+
+<a id="english"></a>
+## Tools and debugging SGD DDA
+
+How to control SGD at runtime, where to read state, and how debugging ties to telemetry. Theory of the **four axes**, commands `dda_sgd_axis_*`, and `axis_*` fields: [`Axes.md`](Axes.md#english).
+
+### Algorithm control and state reset
+
+`DdaAlgorithmState.ActiveAlgorithm` selects `Fixed`, `Genetic`, or `Sgd`; use `Activate(...)`. `IsGeneticAlgorithmEnabled` preserves GA expectations; `IsDebugOverlayEnabled` enables overlay and telemetry collection even when SGD is not the active algorithm.
+
+On run start, `SgdRuntimeDriver.Run_Start` resets `SgdDecisionRuntimeState` and `SgdActuatorsRuntimeState` and runs `SgdActuatorsApplier.ApplyToAllLivingMonsters()`. On player body change, `SgdSensorsHooks.Reset` clears the tracked body, `SgdSensorsEstimator` internals, and `SgdSensorsRuntimeState`. For a hard reset without a new run, call `SgdRuntimeState.Clear`, `SgdSensorsRuntimeState.Clear`, `SgdDecisionRuntimeState.Reset`, `SgdActuatorsRuntimeState.Reset` — wrap in one console command if useful.
+
+### CheatManager and console
+
+`GeneticsArtifact.CheatManager` wires the RoR2 console. Examples: `dda_algorithm fixed|genetic|sgd` (aliases `fls`, `ga`); force `SgdActuatorsApplier.ApplyToAllLivingMonsters()` after manual multiplier edits; log `VirtualPower`, `SgdSensorsRuntimeState.Sample`, multipliers, and \(\theta\)/velocity from `SgdDecisionRuntimeState`. Full command list and axes: [`CheatManager/README.md`](../../CheatManager/README.md#english) and [`Axes.md`](Axes.md#english).
+
+Experiments: `dda_survey <fairness 1-7> <continuity 1-7> [comment]` → `dda_post_session_survey`; `dda_sgd_step_time [seconds]` — combat-time accumulation interval between SGD steps.
+
+### Debug overlay and visualization
+
+`DdaAlgorithmState.IsDebugOverlayEnabled` turns on extended debugging:
+
+- Even if `ActiveAlgorithm != DdaAlgorithmType.Sgd`, sensors and the runtime driver can keep collecting data.
+- You can evaluate sensor and virtual-power behavior without changing difficulty, and compare SGD vs GA on the same session.
+
+Possible overlay contents (depends on your UI):
+
+- **Telemetry**: current player virtual power \(V_p(t)\); normalized sensors (HitRateOnPlayerNorm01, IncomingDamageNorm01, OutgoingDamageNorm01, LowHealthUptime, DeathsPerWindowNorm01, AvgTtkSecondsNorm01).
+- **Decision state**: per-axis multipliers (MaxHealth, MoveSpeed, AttackSpeed, AttackDamage); skill01/challenge01 per axis; error and direction of change.
+
+Implement as a simple text HUD fed from `SgdRuntimeState`, `SgdSensorsRuntimeState`, `SgdDecisionRuntimeState`, `SgdActuatorsRuntimeState`.
+
+### Logging and behavior analysis
+
+Use `GeneticsArtifactPlugin.geneticLogSource` (or the mod’s `ManualLogSource`). Useful log points: per-axis `Record*Step` (skill01, challenge01, error, gradient, velocity, deltaTheta, new multiplier); `RecordGlobalStep(appliedMonsters)`; mode toggles, CheatManager interventions, resets. For offline analysis, parse logs (Python/R) for multiplier evolution, skill/challenge balance, vs virtual power.
+
+### Typical debug scenarios
+
+**Too hard:** Enable SGD and overlay; force high incoming damage, deaths, long TTK; watch IncomingDamageNorm01, LowHealthUptime, DeathsPerWindowNorm01 and per-axis skill/challenge; check HP/AttackDamage multipliers decrease. Tune learning rates or `Estimate*Skill01` weights if needed.
+
+**Too easy:** Low incoming damage, few deaths, short TTK; multipliers should rise toward caps without violent oscillation.
+
+**Transitional:** Stage changes, build spikes, long win streaks — difficulty should track improved builds and not trap the player after a bad room.
+
+### PostHog export scripts
+
+`tools/posthog_export_events.ps1` / `.bat`, `tools/posthog_export_all.ps1` / `.bat` export to `tools/posthog_exports/` (gitignored).
+
+### H1–H4: verification protocol and metrics
+
+From `telemetry_schema_version = 3`, H1–H4 use session aggregates and four planes: `damage` ↔ `AttackDamage`, `attackSpeed` ↔ `AttackSpeed`, `hp` ↔ `MaxHealth`, `moveSpeed` ↔ `MoveSpeed`. One actuator per plane; do not fold them into one “monster difficulty” scalar vs \(V_p\). `regen` is auxiliary inside `hp`, not a fifth axis. `axis_*` fields and skill weights: [`Axes.md`](Axes.md#english).
+
+#### Session quality
+
+The analysis unit is a **session**, not each `dda_sample`. Samples are a time series and autocorrelated — do not inflate N by treating every tick as independent.
+
+Quality markers: `telemetry_schema_version >= 3`; `duration_seconds >= 300`; `is_quality_excluded_short_session = false`; `missed_sample_intervals = 0` or documented tolerance; filled `player_body`, `dda_mode`, `runtime_run_seed`, `stage_name`, `run_attempt_index`; `dda_session_end` present; for H5/H6 also `dda_post_session_survey` or `dda_post_session_survey_skipped`.
+
+For strict mode comparison: same survivor where possible, comparable run conditions, repeat `FLS`, `GA`, `SGD`; fix or balance `condition_order` across participants.
+
+#### H1: alignment accuracy
+
+H1 asks whether SGD lowers mean absolute misalignment vs FLS and GA. Telemetry: `axis_attack_damage_abs_error`, `axis_attack_speed_abs_error`, `axis_max_health_abs_error`, `axis_move_speed_abs_error`.
+
+```text
+MAE_align_session = mean(axis_*_abs_error)
+```
+
+Compare distributions so \(E[\text{MAE\_align}]_{\text{SGD}} < E[\text{MAE\_align}]_{\text{FLS}}\) and vs GA. Report counts, mean/median, plots, CIs for SGD−FLS and SGD−GA; bootstrap CIs are illustrative only in pilots.
+
+#### H2: smoothness of difficulty dynamics
+
+`axis_*_is_jump` is supplementary; prefer continuous smoothness metrics. SGD steps are small, so `telemetryJumpThreshold = 0.10` can yield `JumpRate = 0` while adaptation still happens.
+
+Schema v3 fields: `axis_*_delta_multiplier`, `axis_*_abs_delta_multiplier`, `axis_*_delta_theta`, `axis_*_abs_delta_theta`, `axis_*_relative_delta_multiplier`, `axis_*_abs_relative_delta_multiplier`, `axis_*_is_jump`.
+
+```text
+JumpRate_session = count(axis_*_is_jump = true) / count(axis observations)
+MeanAbsDelta_session = mean(axis_*_abs_delta_multiplier)
+P95AbsDelta_session = p95(axis_*_abs_delta_multiplier)
+MeanAbsDeltaTheta_session = mean(axis_*_abs_delta_theta)
+MeanAbsRelativeDelta_session = mean(axis_*_abs_relative_delta_multiplier)
+```
+
+Lower continuous metrics mean smoother adaptation. Interpret `JumpRate` together with mean/p95/max deltas.
+
+#### H3: compensating power growth across four planes
+
+Do **not** validate H3 only via `virtual_power_total` vs `virtual_challenge_total` (different scales/spaces). Primary H3 is within the four planes. Fields: `axis_*_plane`, `axis_*_skill01`, `axis_*_challenge01`, `axis_*_error`, `axis_*_abs_error`, `axis_*_delta_skill01`, `axis_*_delta_challenge01`.
+
+```text
+H3_axis_MAE_session = mean(axis_*_abs_error)
+StableRate_session = count(axis_*_abs_error <= epsilon_stable) / count(axis observations)
+AxisCoupling_session = corr(delta_skill_i, delta_challenge_i)
+```
+
+Interpret coupling cautiously; consider lagged correlation `corr(delta_skill_i(t), delta_challenge_i(t+1))`. Keep `virtual_power_total`, `virtual_challenge_total`, `virtual_gap_abs`, `delta_virtual_power`, `delta_virtual_challenge` as diagnostic legacy only, not the main H3 criterion.
+
+#### H4: recovery after degradation
+
+H4 applies to sessions with a real degradation episode. If `degradation_events_count = 0`, the session describes stable play, not recovery time.
+
+Fields: `degradation_signal`, `is_degraded`, `is_degraded_050`/`060`/`070`, time above thresholds, `degradation_signal_below_recovery_seconds`, events `dda_degradation_start`, `dda_degradation_end`, `dda_recovery`, `recovery_elapsed_seconds`.
+
+```text
+T_recovery_session = mean(recovery_elapsed_seconds)
+```
+
+Exclude sessions missing degradation start/recovery from `T_recovery` comparisons; report missingness rates. Pilot: inspect max `degradation_signal` and time above 0.50/0.60/0.70; fix `telemetryDegradationThreshold` and `telemetryRecoveryThreshold` before the main study.
+
+#### H1–H4 analysis commands
+
+```bash
+python tools/analyze_hypotheses_h1_h4.py tools/posthog_exports/ALL_events_*.jsonl
+python tools/analyze_hypotheses_h1_h4.py tools/posthog_exports/ALL_events_*.jsonl --only-huntress
+python tools/analyze_hypotheses_h1_h4.py tools/posthog_exports/ALL_events_*.jsonl --min-schema-version 3
+```
+
+Outputs: `tools/posthog_exports/hypotheses_results/session_metrics_h1_h4.csv`, `summary_h1_h4.md`.
+
+Sensor calibration:
+
+```bash
+python tools/calibrate_sgd_sensors.py tools/posthog_exports/ALL_events_*.jsonl --only-huntress
+```
+
+Produces `sensor_calibration_hints.md` — candidate thresholds only; finalize manually in experiment config.
+
+### H5/H6: survey protocol and export validation
+
+Subjective Likert 1–7: **H5 fairness** (1 unfair … 7 fair); **H6 continuity** (1 jagged … 7 smooth). Telemetry: `dda_post_session_survey` with `fairness_likert_1_7`, `continuity_likert_1_7`, `survey_comment`; duplicated in `dda_session_end`. Close without submit → `dda_post_session_survey_skipped`.
+
+Validator:
+
+```bash
+python tools/validate_posthog_survey.py tools/posthog_exports/ALL_events_*.jsonl
+python tools/validate_posthog_survey.py tools/posthog_exports/ALL_events_*.jsonl --show-ok
+```
+
+---
+
+<a id="russian"></a>
 ## Инструменты и отладка SGD DDA
 
-Как управлять SGD в рантайме, где смотреть состояние и как связаны отладка с телеметрией. Теория **четырёх осей**, команды `dda_sgd_axis_*` и поля `axis_*` — в [`Axes.md`](Axes.md).
+Как управлять SGD в рантайме, где смотреть состояние и как связаны отладка с телеметрией. Теория **четырёх осей**, команды `dda_sgd_axis_*` и поля `axis_*` — в [`Axes.md`](Axes.md#russian).
 
 ### Управление алгоритмом и сброс состояния
 
@@ -10,7 +155,7 @@
 
 ### Использование CheatManager и консольных команд
 
-`GeneticsArtifact.CheatManager` подключает консоль RoR2. Примеры: `dda_algorithm fixed|genetic|sgd` (синонимы `fls`, `ga`); принудительное `SgdActuatorsApplier.ApplyToAllLivingMonsters()` после ручной правки множителей; вывод в лог `VirtualPower`, `SgdSensorsRuntimeState.Sample`, множителей и \(\theta\)/velocity из `SgdDecisionRuntimeState`. Полный список и оси — `CheatManager/README.md` и [`Axes.md`](Axes.md).
+`GeneticsArtifact.CheatManager` подключает консоль RoR2. Примеры: `dda_algorithm fixed|genetic|sgd` (синонимы `fls`, `ga`); принудительное `SgdActuatorsApplier.ApplyToAllLivingMonsters()` после ручной правки множителей; вывод в лог `VirtualPower`, `SgdSensorsRuntimeState.Sample`, множителей и \(\theta\)/velocity из `SgdDecisionRuntimeState`. Полный список и оси — [`CheatManager/README.md`](../../CheatManager/README.md#russian) и [`Axes.md`](Axes.md#russian).
 
 Для экспериментов: `dda_survey <fairness 1-7> <continuity 1-7> [comment]` → `dda_post_session_survey`; `dda_sgd_step_time [seconds]` — интервал накопления боя между шагами SGD.
 
@@ -132,7 +277,7 @@ Overlay удобно реализовать как простой текстов
 
 ### H1-H4: протокол проверки и метрики
 
-Начиная с `telemetry_schema_version = 3`, H1–H4 опираются на сессионные агрегаты и четыре плоскости: `damage` ↔ `AttackDamage`, `attackSpeed` ↔ `AttackSpeed`, `hp` ↔ `MaxHealth`, `moveSpeed` ↔ `MoveSpeed`. У каждой — один актуатор; смешивать их в один скаляр «сложности монстров» для сравнения с \(V_p\) нельзя. `regen` только как вспомогательный сигнал внутри `hp`, не как пятая ось. Соответствие полей `axis_*` и весов skill — [`Axes.md`](Axes.md).
+Начиная с `telemetry_schema_version = 3`, H1–H4 опираются на сессионные агрегаты и четыре плоскости: `damage` ↔ `AttackDamage`, `attackSpeed` ↔ `AttackSpeed`, `hp` ↔ `MaxHealth`, `moveSpeed` ↔ `MoveSpeed`. У каждой — один актуатор; смешивать их в один скаляр «сложности монстров» для сравнения с \(V_p\) нельзя. `regen` только как вспомогательный сигнал внутри `hp`, не как пятая ось. Соответствие полей `axis_*` и весов skill — [`Axes.md`](Axes.md#russian).
 
 #### Качество сессии
 
@@ -342,5 +487,3 @@ python tools/validate_posthog_survey.py tools/posthog_exports/ALL_events_*.jsonl
 ```bash
 python tools/validate_posthog_survey.py tools/posthog_exports/ALL_events_*.jsonl --show-ok
 ```
-
-

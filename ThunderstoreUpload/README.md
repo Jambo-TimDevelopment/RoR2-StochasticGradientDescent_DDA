@@ -1,3 +1,59 @@
+**Languages:** [English](#english) · [Русский](#russian)
+
+---
+
+<a id="english"></a>
+# GeneticsArtifact (research build)
+
+## What this is
+
+A **Risk of Rain 2** mod on **BepInEx**: adds the **Genetics** artifact and a system that adjusts monster stats as fights progress. This build extends the original idea for a master’s thesis on dynamic difficulty (DDA).
+
+## Relation to the original
+
+Based on **GeneticArtifact** by **Rico** on Thunderstore:  
+https://thunderstore.io/package/Rico/GeneticArtifact/
+
+The artifact, genetic mode, and core “genes on monsters” idea remain; extra adaptation modes and research features are added. For code details see **GitHub** (link on the Thunderstore package page / repository field).
+
+## What players should know
+
+- The mod loads like any BepInEx plugin — install via a mod manager (or follow manual layout). Nothing extra to “launch.”
+- **By default, adaptation strategy rotates between new runs**: fixed difficulty, Rico-style genetics, and an extra adaptive mode. You do not need console commands to switch unless you turn that off (see below).
+- In-run, the **Genetics artifact** still matters — enable it the same way as in the original (challenge, portal code, etc.; see Rico’s page).
+
+## In-game settings (**Risk of Options**)
+
+With **Risk of Options**, the mod appears in the game menu (**Genetics** section): learning limits, gene floors/caps, separate limits for adaptive HP/speed/damage axes, and other balance knobs.
+
+## If you don’t want auto mode rotation or data collection
+
+Extra toggles (auto mode rotation, research telemetry, etc.) live in the **BepInEx config file**, not only Risk of Options:
+
+`Risk of Rain 2\BepInEx\config\com.RicoValdezio.ArtifactOfGenetics.cfg`
+
+Edit in a text editor if needed:
+
+- **Research DDA Rotation** — set **Auto Rotate Algorithms** = `false` to stop automatic mode changes between runs;
+- **Research Telemetry** — **Telemetry Enabled** = `false` to disable anonymous research uploads.
+
+Save and restart the game (or start a new run) as usual for BepInEx configs.
+
+## Dependencies
+
+Required mods match the Thunderstore package card (BepInEx, R2API, Risk of Options, etc.) — the mod manager installs them.
+
+## Install
+
+Use **r2modman / Thunderstore Mod Manager** or manual layout from the package archive (see Thunderstore docs).
+
+---
+
+*Full technical docs, experiment design, and source — on GitHub (link in the package description).*
+
+---
+
+<a id="russian"></a>
 # GeneticsArtifact (исследовательская сборка)
 
 ## Что это

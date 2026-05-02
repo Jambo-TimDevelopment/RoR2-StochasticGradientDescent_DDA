@@ -1,3 +1,84 @@
+**Languages:** [English](#english) · [Русский](#russian)
+
+---
+
+<a id="english"></a>
+# CheatManager: console commands and debugging
+
+Commands register in `DdaCheatManager` via `[ConCommand]` and R2API `CommandHelper`. Enter them in the in-game RoR2 console (how to open depends on your build/mods; **DebugToolkit** or similar helps).
+
+Command prefix: **`dda_`**.
+
+## Debug overlay (`dda_debug_overlay`)
+
+Semi-transparent text panel at the top: DDA mode, player virtual power `V_p` (offense/defense/mobility/total), SGD **actuators** (HP/MS/AS/DMG multipliers), SGD **decision** block (step interval, combat timer, enabled axes, step counters, last skill/challenge/error and gradients per axis), **sensors** (DPS, hits on player, combat uptime, etc.).
+
+Overlay does **not** capture clicks.
+
+Toggle: `dda_debug_overlay`; `dda_debug_overlay 1` on; `dda_debug_overlay 0` off.
+
+If `V_p` shows `N/A`, you need an active run and virtual-power data (including SGD mode).
+
+## Telemetry overlay (`dda_telemetry_overlay`)
+
+Shows the **last queued** telemetry sample (`dda_sample`) — quick PostHog sanity check without the full debug overlay.
+
+Toggle: `dda_telemetry_overlay`, `dda_telemetry_overlay 1` / `0`.
+
+## DDA modes
+
+| Command | Description |
+|--------|-------------|
+| `dda_algorithm` | No args — print current algorithm. |
+| `dda_algorithm fixed` or `fls` | Fixed difficulty (FLS). |
+| `dda_algorithm genetic` or `ga` | Genetic algorithm (reference mod). |
+| `dda_algorithm sgd` | SGD DDA. |
+| `dda_genetics` | Toggle “genetics” (no arg = flip; `dda_genetics 1` genetic, `0` fixed per mod semantics). |
+
+## SGD: step and axes
+
+| Command | Description |
+|--------|-------------|
+| `dda_sgd_step_time` | Show current step interval (combat seconds). |
+| `dda_sgd_step_time 10` | Set step interval (**combat time** only). Setting this enables SGD mode. |
+| `dda_sgd_axis_hp [0\|1]` | Enable/disable **MaxHealth** axis. No arg = toggle. |
+| `dda_sgd_axis_ms [0\|1]` | **MoveSpeed**. |
+| `dda_sgd_axis_as [0\|1]` | **AttackSpeed**. |
+| `dda_sgd_axis_dmg [0\|1]` | **AttackDamage**. |
+
+## SGD: manual multipliers (actuators)
+
+Set monster stat multipliers; on **host**, applies to spawned and future monsters. Decimals: `1.5` or `1,5`.
+
+| Command | Description |
+|--------|-------------|
+| `dda_actuator_hp` | Show current HP multiplier. |
+| `dda_actuator_hp 1.25` | Set **MaxHealth** multiplier. |
+| `dda_actuator_ms`, `dda_actuator_as`, `dda_actuator_dmg` | Move speed, attack speed, damage. |
+
+Mod log tip: when tuning actuators manually, sometimes disable genetics interference: `dda_genetics 0`.
+
+If you are not the server (`NetworkServer` inactive), the value is stored but application may warn in the log.
+
+## Other
+
+| Command | Description |
+|--------|-------------|
+| `dda_show_monster_hp` | **Client** HP numbers above monsters. No arg = toggle; `0`/`1` off/on. |
+| `dda_survey <1-7> <1-7> [comment]` | Post-session survey (1–7 fairness & continuity). Needs active telemetry session. |
+| `dda_param` | Stub: logs not implemented; use BepInEx config / Risk of Options. |
+
+## Source files
+
+- `DdaCheatManager.cs` — registration
+- `DebugOverlayBehaviour.cs` — debug overlay text
+- `TelemetryDebugOverlayBehaviour.cs` — telemetry overlay
+
+SGD methodology: [`Docs/SgdDda/ToolsAndDebug.md`](../Docs/SgdDda/ToolsAndDebug.md#english).
+
+---
+
+<a id="russian"></a>
 # CheatManager: консольные команды и отладка
 
 Команды регистрируются в `DdaCheatManager` через атрибуты `[ConCommand]` и R2API `CommandHelper`. Их нужно вводить в **игровой консоли** RoR2 (способ открытия зависит от сборки и модов; для удобства часто ставят **DebugToolkit** или другой мод с консолью).
@@ -87,4 +168,4 @@
 - Текст дебаг-оверлея: `DebugOverlayBehaviour.cs`
 - Телеметрический оверлей: `TelemetryDebugOverlayBehaviour.cs`
 
-Подробная методика и консоль в контексте SGD: `Docs/SgdDda/ToolsAndDebug.md`.
+Подробная методика и консоль в контексте SGD: [`Docs/SgdDda/ToolsAndDebug.md`](../Docs/SgdDda/ToolsAndDebug.md#russian).

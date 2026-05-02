@@ -1,3 +1,122 @@
+**Languages:** [English](#english) · [Русский](#russian)
+
+---
+
+<a id="english"></a>
+# SgdEngine — DDA via stochastic gradient descent
+
+This folder implements **difficulty adaptation through SGD** for the GeneticsArtifact mod. Architecture:
+
+```text
+Sensors → Decision (SGD) → Actuators
+```
+
+- **Sensors** — how the player is performing; smoothed combat signals (damage, hits, TTK, etc.).
+- **Decision** — optimization steps on four axes: multipliers `MaxHealth`, `MoveSpeed`, `AttackSpeed`, `AttackDamage` with \(\theta = \ln(\text{multiplier})\).
+- **Actuators** — write multipliers into monster inventory via the same **gene tokens** as the genetic engine (`GeneTokenCalc` / RecalculateStats) **without** editing `GeneticEngine/`.
+
+Math, hypotheses H1–H4, and telemetry integration: `Docs/SgdDda/` (`Architecture.md`, `Implementation.md`, `Integration.md`). This file is a **code and file** overview.
+
+## Directory layout
+
+| Path | Role |
+|------|------|
+| `SgdRuntimeDriver.cs` | `Run.Start` / `Run.BeginGameOver` hooks, component on `Run`: each frame updates \(V_p\), sensors, and (on host) the decision module. |
+| `SgdRuntimeState.cs` | Last virtual-power estimate \(V_p\) and body it was computed for. |
+| `SgdVirtualPowerEstimator.cs` | Compute and smooth \(V_p\) components (offense / defense / mobility / total). |
+| `SgdVirtualPowerSample.cs` | Immutable \(V_p\) snapshot for sensors and debugging. |
+| `SgdAxisLimitProvider.cs` | Shared **floor/cap** per axis from `ConfigManager` (`sgdHpFloor`/`sgdHpCap`, …). |
+| `Sensors/SgdSensorsHooks.cs` | Harmony: `TakeDamage`, `CharacterBody.OnDestroy`; sensor tick; reset on player body change. |
+| `Sensors/SgdSensorsEstimator.cs` | Sliding windows, EMA, normalization; damage/death events. |
+| `Sensors/SgdSensorsSample.cs` | Sensor field struct (DPS, hit rate, combat uptime, TTK, …). |
+| `Sensors/SgdSensorsRuntimeState.cs` | Latest published sample for Decision and telemetry. |
+| `Decision/SgdDecisionDriver.cs` | SGD step logic for all enabled axes: error, gradient, momentum, clipping, actuator sync. |
+| `Decision/SgdDecisionRuntimeState.cs` | \(\theta\), velocities, **combat** timer until step, axis flags, last-step telemetry. |
+| `Actuators/SgdActuatorsRuntimeState.cs` | Current HP/MS/AS/DMG multipliers (after clamp). |
+| `Actuators/SgdGeneStatTokenApplier.cs` | Map multiplier to ±1% token counts and set exact item stacks in `Inventory`. |
+| `Actuators/SgdActuatorsApplier.cs` | Walk all living monsters, apply current multipliers + `RecalculateStats`. |
+| `Actuators/SgdActuatorsHooks.cs` | `CharacterBody.Start`: new monster spawns get current multipliers. |
+
+## Entry point: `SgdRuntimeDriver`
+
+**Registration:** `SgdRuntimeDriver.RegisterHooks()` is called from the plugin when SGD diagnostic hooks are enabled (`diagnosticsEnableSgdHooks`).
+
+**`Run.Start`:** resets `SgdDecisionRuntimeState` and `SgdActuatorsRuntimeState`, then `SgdActuatorsApplier.ApplyToAllLivingMonsters()` for a deterministic run start; attaches `SgdRuntimeDriver` to `Run` (one per run); if telemetry is on, attaches `TelemetryRuntimeDriver` to the same object to avoid duplicate `Run.Start` detours.
+
+**`Run.BeginGameOver`:** notifies telemetry of run end when enabled.
+
+**Per-frame `Update`:** (1) find player body (`isPlayerControlled`, else `Player` team); (2) on switching to SGD, optionally reset decision state (debug convenience); (3) `SgdVirtualPowerEstimator` → `SgdRuntimeState.SetVirtualPower`; (4) `SgdSensorsHooks.Tick`; (5) if `ActiveAlgorithm == Sgd` and **`NetworkServer.active`**, `SgdDecisionDriver.Tick`.
+
+**\(V_p\) and sensors** may run locally; **SGD steps and mass monster updates** run on the host only.
+
+## Sensors (`Sensors/`)
+
+Goal: one coherent `SgdSensorsSample` with normalized \([0,1]\) fields where marked `*Norm01`.
+
+**Hooks:** `HealthComponent.TakeDamage` (incoming to tracked player, outgoing from player to monsters); `CharacterBody.OnDestroy` (player deaths proxy, monster deaths for TTK/counters).
+
+**`SgdSensorsEstimator`:** damage rates, hit rate on player, combat/low-HP uptime, deaths in window, mean TTK, etc.; EMA and time windows (see code).
+
+**`SgdSensorsHooks.Reset(CharacterBody)`** resets estimator and `SgdSensorsRuntimeState` when the controlled body changes (`Tick` detects `playerBody` change).
+
+## Player virtual power \(V_p\)
+
+**`SgdVirtualPowerEstimator`** builds `SgdVirtualPowerSample` from body stats and inventory (log-like compression, time smoothing).
+
+**`SgdRuntimeState`** stores the latest sample and body name — debug overlay, telemetry, consistency with sensors (`GetCurrentSample(vp)` in the estimator–sensor link).
+
+## Decision (`Decision/`)
+
+**`SgdDecisionDriver`** is the SGD core.
+
+**When it steps:** `DdaAlgorithmType.Sgd`, host, valid `dt`, at least one axis enabled; player **in combat** (`!outOfCombat`); `SgdSensorsRuntimeState.HasSample`.
+
+**Step timer:** only **combat** time accumulates (`AddCombatSeconds`). Interval: `SgdDecisionRuntimeState.StepSeconds` (config + console `dda_sgd_step_time`). Large `dt` can trigger multiple steps (`ConsumeDueSteps`).
+
+**Parameterization:** per-axis \(m \in [m_{\min}, m_{\max}]\) from `SgdAxisLimitProvider`; optimization uses \(\theta = \ln m\).
+
+**Per-axis signal (HP example):** `challenge01` — normalized lever position of \(\theta\); `skill01` — weighted sensors (`Estimate*Skill01` differs per axis); `error = challenge01 - skill01` (positive → decrease \(\theta\), see `Step*`).
+
+**Optimization:** gradient from quadratic error form, **momentum**, gradient/velocity clipping, per-axis `deltaTheta` caps (`HpLearningRate`, `HpMaxDeltaTheta`, …).
+
+**Actuator sync:** if multipliers changed externally (`dda_actuator_*`), \(\theta\) and velocity resync from `SgdActuatorsRuntimeState` (`Ensure*StateSynced`).
+
+After a step, if multipliers change, `SgdActuatorsApplier.ApplyToAllLivingMonsters()` runs and affected body count is recorded.
+
+## Actuators (`Actuators/`)
+
+**`SgdActuatorsRuntimeState`** is the source of truth for the four multipliers (clamped via `SgdAxisLimitProvider` on set).
+
+**`SgdGeneStatTokenApplier`:** clamp multiplier; map \(m\) to token count (**1 token ≈ ±1%** from base, `(m-1)*100`, rounding); set exact plus/minus stacks from `GeneTokens.tokenDict` (idempotent). Keeps compatibility with `GeneTokenCalc` without duplicating percentage logic.
+
+**Two application paths:** (1) **`SgdActuatorsHooks`** — new monsters on `CharacterBody.Start`; (2) **`SgdActuatorsApplier`** — mass refresh after SGD or console. Both require **`NetworkServer.active`** and `Sgd` mode (see code guards).
+
+## Axis limits: `SgdAxisLimitProvider`
+
+Reads BepInEx **SGD Axis Limits** (`ConfigManager`): separate floor/cap for HP, MoveSpeed, AttackSpeed, AttackDamage. Swaps if cap < floor. Used in Decision (\(\theta\) bounds) and `SgdGeneStatTokenApplier.Clamp`.
+
+## Diagnostic flags
+
+In `GeneticsArtifactPlugin.Awake`: SGD hooks (`SgdRuntimeDriver`, sensors); optionally **`SgdActuatorsHooks`** (`diagnosticsEnableSgdActuatorsHooks`) — if off, new spawns do not auto-patch (isolate bugs).
+
+More debugging: [`CheatManager/README.md`](../CheatManager/README.md#english), [`Docs/SgdDda/ToolsAndDebug.md`](../Docs/SgdDda/ToolsAndDebug.md#english).
+
+## Relation to the rest of the mod
+
+Mode switching: `DdaAlgorithmState` (`CheatManager`), console `dda_algorithm`, run rotation `DdaRunModeRotator`. GA code is **not** rewritten; SGD uses the same `GeneStat` and tokens. Telemetry reads sensor/decision/actuator/\(V_p\) state without deciding difficulty — `Telemetry/` module.
+
+## Quick source links
+
+| Task | File |
+|------|------|
+| Run lifecycle and Update | `SgdRuntimeDriver.cs` |
+| Step formulas and skill01 | `Decision/SgdDecisionDriver.cs` |
+| Sensor sample contents | `Sensors/SgdSensorsSample.cs`, `SgdSensorsEstimator.cs` |
+| Applying to a monster | `Actuators/SgdGeneStatTokenApplier.cs`, `SgdActuatorsApplier.cs`, `SgdActuatorsHooks.cs` |
+
+---
+
+<a id="russian"></a>
 # SgdEngine — DDA на стохастическом градиентном спуске
 
 Папка содержит реализацию **адаптации сложности через SGD** для мода GeneticsArtifact. Архитектура следует цепочке:
@@ -145,7 +264,7 @@ Sensors → Decision (SGD) → Actuators
 - хуки SGD (`SgdRuntimeDriver`, сенсоры),
 - опционально **`SgdActuatorsHooks`** (`diagnosticsEnableSgdActuatorsHooks`) — если выключено, новые монстры не получают авто-патч при спавне (удобно для изоляции багов).
 
-Подробнее про отладку и консоль: `CheatManager/README.md`, `Docs/SgdDda/ToolsAndDebug.md`.
+Подробнее про отладку и консоль: [`CheatManager/README.md`](../CheatManager/README.md#russian), [`Docs/SgdDda/ToolsAndDebug.md`](../Docs/SgdDda/ToolsAndDebug.md#russian).
 
 ---
 
