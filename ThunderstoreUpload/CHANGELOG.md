@@ -23,4 +23,4 @@ For upstream history (4.5.3 and earlier), see the changelog on [Rico’s package
 
 ## Thunderstore icon (AI disclosure)
 
-The package **icon** (`icon.png`) was created with **generative AI** (AI-assisted image generation), then cropped and resized to **256×256** for Thunderstore.
+The package **icon** (`icon.png`) uses **generative AI** (AI-assisted image generation): meme-y “no MERCY / pain meter” artifact-style art for **PainGradient: Suffering Descent**; exported as **256×256** after center-crop and resize for Thunderstore.

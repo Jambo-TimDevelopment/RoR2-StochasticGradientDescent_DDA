@@ -1,3 +1,10 @@
+"""
+Session-level aggregates for hypotheses H1–H4 from PostHog JSONL exports.
+
+All survivors are included by default (`player_body` is recorded per session but not used
+to filter). Use `--only-mode`, time windows, or schema filters when you need subsets.
+"""
+
 import argparse
 import csv
 import glob
@@ -123,7 +130,7 @@ class SessionMetrics:
     samples_count: int = 0
     axis_obs_count: int = 0
 
-    # H2
+    # H2.1 actuator smoothness
     h2_jump_rate_flag: float | None = None
     h2_jump_rate_tau: float | None = None
     h2_mean_abs_delta_multiplier: float | None = None
@@ -131,6 +138,19 @@ class SessionMetrics:
     h2_max_abs_delta_multiplier: float | None = None
     h2_mean_abs_delta_theta: float | None = None
     h2_mean_abs_relative_delta_multiplier: float | None = None
+
+    # H2.2 challenge smoothness
+    h2_challenge_jump_rate_tau: float | None = None
+    h2_mean_abs_delta_challenge01: float | None = None
+    h2_p95_abs_delta_challenge01: float | None = None
+
+    # H2.3 skill-challenge mismatch smoothness
+    h2_error_jump_rate_tau: float | None = None
+    h2_abs_error_jump_rate_tau: float | None = None
+    h2_mean_abs_delta_error: float | None = None
+    h2_p95_abs_delta_error: float | None = None
+    h2_mean_abs_delta_abs_error: float | None = None
+    h2_p95_abs_delta_abs_error: float | None = None
     tau_jump: float | None = None
 
     # H3
@@ -226,11 +246,6 @@ def main() -> int:
         help="Random seed for bootstrap.",
     )
     ap.add_argument(
-        "--only-huntress",
-        action="store_true",
-        help="Restrict analysis to sessions where player_body indicates Huntress/Охотница.",
-    )
-    ap.add_argument(
         "--min-schema-version",
         type=int,
         default=0,
@@ -278,6 +293,12 @@ def main() -> int:
     sess_abs_delta_multiplier: dict[str, list[float]] = {}
     sess_abs_delta_theta: dict[str, list[float]] = {}
     sess_abs_relative_delta_multiplier: dict[str, list[float]] = {}
+    sess_challenge_jump_tau: dict[str, list[int]] = {}
+    sess_abs_delta_challenge01: dict[str, list[float]] = {}
+    sess_error_jump_tau: dict[str, list[int]] = {}
+    sess_abs_error_jump_tau: dict[str, list[int]] = {}
+    sess_abs_delta_error: dict[str, list[float]] = {}
+    sess_abs_delta_abs_error: dict[str, list[float]] = {}
     sess_tau_jump: dict[str, float] = {}
     sess_eps_v: dict[str, float] = {}
     sess_eps_stable: dict[str, float] = {}
@@ -416,12 +437,38 @@ def main() -> int:
 
                         skill = _safe_float(props.get(f"axis_{ax}_skill01"))
                         challenge = _safe_float(props.get(f"axis_{ax}_challenge01"))
+                        error = _safe_float(props.get(f"axis_{ax}_error"))
+                        if error is None and skill is not None and challenge is not None:
+                            error = challenge - skill
                         dskill = _safe_float(props.get(f"axis_{ax}_delta_skill01"))
                         dchallenge = _safe_float(props.get(f"axis_{ax}_delta_challenge01"))
                         if (dskill is None or dchallenge is None) and skill is not None and challenge is not None and key in prev_axis_signals:
                             prev_skill, prev_challenge = prev_axis_signals[key]
                             dskill = skill - prev_skill
                             dchallenge = challenge - prev_challenge
+                        if dchallenge is not None:
+                            abs_dchallenge = abs(dchallenge)
+                            sess_abs_delta_challenge01.setdefault(session_id, []).append(abs_dchallenge)
+                            if tau_jump is not None:
+                                sess_challenge_jump_tau.setdefault(session_id, []).append(
+                                    1 if abs_dchallenge > tau_jump else 0
+                                )
+                        if dskill is not None and dchallenge is not None:
+                            derror = dchallenge - dskill
+                            abs_derror = abs(derror)
+                            sess_abs_delta_error.setdefault(session_id, []).append(abs_derror)
+                            if tau_jump is not None:
+                                sess_error_jump_tau.setdefault(session_id, []).append(
+                                    1 if abs_derror > tau_jump else 0
+                                )
+                            if error is not None:
+                                prev_error = error - derror
+                                abs_delta_abs_error = abs(abs(error) - abs(prev_error))
+                                sess_abs_delta_abs_error.setdefault(session_id, []).append(abs_delta_abs_error)
+                                if tau_jump is not None:
+                                    sess_abs_error_jump_tau.setdefault(session_id, []).append(
+                                        1 if abs_delta_abs_error > tau_jump else 0
+                                    )
                         if dskill is not None and dchallenge is not None and key in prev_axis_signals:
                             sess_h3_delta_skill.setdefault(session_id, []).append(dskill)
                             sess_h3_delta_challenge.setdefault(session_id, []).append(dchallenge)
@@ -523,6 +570,33 @@ def main() -> int:
         if abs_relative_delta:
             m.h2_mean_abs_relative_delta_multiplier = statistics.fmean(abs_relative_delta)
 
+        abs_delta_challenge = sess_abs_delta_challenge01.get(session_id, [])
+        if abs_delta_challenge:
+            m.h2_mean_abs_delta_challenge01 = statistics.fmean(abs_delta_challenge)
+            m.h2_p95_abs_delta_challenge01 = _percentile(abs_delta_challenge, 0.95)
+
+        challenge_jump_tau = sess_challenge_jump_tau.get(session_id, [])
+        if challenge_jump_tau:
+            m.h2_challenge_jump_rate_tau = statistics.fmean(challenge_jump_tau)
+
+        abs_delta_error = sess_abs_delta_error.get(session_id, [])
+        if abs_delta_error:
+            m.h2_mean_abs_delta_error = statistics.fmean(abs_delta_error)
+            m.h2_p95_abs_delta_error = _percentile(abs_delta_error, 0.95)
+
+        error_jump_tau = sess_error_jump_tau.get(session_id, [])
+        if error_jump_tau:
+            m.h2_error_jump_rate_tau = statistics.fmean(error_jump_tau)
+
+        abs_delta_abs_error = sess_abs_delta_abs_error.get(session_id, [])
+        if abs_delta_abs_error:
+            m.h2_mean_abs_delta_abs_error = statistics.fmean(abs_delta_abs_error)
+            m.h2_p95_abs_delta_abs_error = _percentile(abs_delta_abs_error, 0.95)
+
+        abs_error_jump_tau = sess_abs_error_jump_tau.get(session_id, [])
+        if abs_error_jump_tau:
+            m.h2_abs_error_jump_rate_tau = statistics.fmean(abs_error_jump_tau)
+
         h3_axis_errors = sess_h3_axis_abs_errors.get(session_id, [])
         if h3_axis_errors:
             m.h3_axis_mean_abs_error = statistics.fmean(h3_axis_errors)
@@ -585,15 +659,6 @@ def main() -> int:
         m.samples_count = 0
         sessions.append(m)
 
-    if args.only_huntress:
-        def _is_huntress(text: str) -> bool:
-            if not text:
-                return False
-            t = _normalize_mojibake(text).strip().lower()
-            return ("охотниц" in t) or ("huntress" in t)
-
-        sessions = [s for s in sessions if _is_huntress(s.player_body)]
-
     if args.min_schema_version > 0:
         sessions = [
             s for s in sessions
@@ -653,6 +718,15 @@ def main() -> int:
                 "h2_max_abs_delta_multiplier",
                 "h2_mean_abs_delta_theta",
                 "h2_mean_abs_relative_delta_multiplier",
+                "h2_challenge_jump_rate_tau",
+                "h2_mean_abs_delta_challenge01",
+                "h2_p95_abs_delta_challenge01",
+                "h2_error_jump_rate_tau",
+                "h2_abs_error_jump_rate_tau",
+                "h2_mean_abs_delta_error",
+                "h2_p95_abs_delta_error",
+                "h2_mean_abs_delta_abs_error",
+                "h2_p95_abs_delta_abs_error",
                 "epsilon_v",
                 "h3_axis_mean_abs_error",
                 "h3_axis_within_stable_rate",
@@ -689,6 +763,15 @@ def main() -> int:
                     "" if s.h2_max_abs_delta_multiplier is None else s.h2_max_abs_delta_multiplier,
                     "" if s.h2_mean_abs_delta_theta is None else s.h2_mean_abs_delta_theta,
                     "" if s.h2_mean_abs_relative_delta_multiplier is None else s.h2_mean_abs_relative_delta_multiplier,
+                    "" if s.h2_challenge_jump_rate_tau is None else s.h2_challenge_jump_rate_tau,
+                    "" if s.h2_mean_abs_delta_challenge01 is None else s.h2_mean_abs_delta_challenge01,
+                    "" if s.h2_p95_abs_delta_challenge01 is None else s.h2_p95_abs_delta_challenge01,
+                    "" if s.h2_error_jump_rate_tau is None else s.h2_error_jump_rate_tau,
+                    "" if s.h2_abs_error_jump_rate_tau is None else s.h2_abs_error_jump_rate_tau,
+                    "" if s.h2_mean_abs_delta_error is None else s.h2_mean_abs_delta_error,
+                    "" if s.h2_p95_abs_delta_error is None else s.h2_p95_abs_delta_error,
+                    "" if s.h2_mean_abs_delta_abs_error is None else s.h2_mean_abs_delta_abs_error,
+                    "" if s.h2_p95_abs_delta_abs_error is None else s.h2_p95_abs_delta_abs_error,
                     "" if s.epsilon_v is None else s.epsilon_v,
                     "" if s.h3_axis_mean_abs_error is None else s.h3_axis_mean_abs_error,
                     "" if s.h3_axis_within_stable_rate is None else s.h3_axis_within_stable_rate,
@@ -733,8 +816,6 @@ def main() -> int:
     md_path = os.path.join(out_dir, "summary_h1_h4.md")
     with open(md_path, "w", encoding="utf-8") as f:
         f.write("# Pilot check: H1-H4 on PostHog export\n\n")
-        if args.only_huntress:
-            f.write("- filter: only Huntress/Охотница sessions\n")
         if args.min_schema_version > 0:
             f.write(f"- filter: telemetry_schema_version >= {args.min_schema_version}\n")
         if args.min_axis_obs > 0:
@@ -785,33 +866,78 @@ def main() -> int:
             lower_is_better=True,
         )
         _write_metric_block(
-            "H2 smoothness (JumpRate by axis_*_is_jump)",
+            "H2.1 actuator smoothness (JumpRate by axis_*_is_jump)",
             "h2_jump_rate_flag",
             lower_is_better=True,
         )
         _write_metric_block(
-            "H2 smoothness (JumpRate by |axis_*_delta_multiplier| > tau_jump)",
+            "H2.1 actuator smoothness (JumpRate by |axis_*_delta_multiplier| > tau_jump)",
             "h2_jump_rate_tau",
             lower_is_better=True,
         )
         _write_metric_block(
-            "H2 smoothness (mean abs delta_multiplier per session)",
+            "H2.1 actuator smoothness (mean abs delta_multiplier per session)",
             "h2_mean_abs_delta_multiplier",
             lower_is_better=True,
         )
         _write_metric_block(
-            "H2 smoothness (p95 abs delta_multiplier per session)",
+            "H2.1 actuator smoothness (p95 abs delta_multiplier per session)",
             "h2_p95_abs_delta_multiplier",
             lower_is_better=True,
         )
         _write_metric_block(
-            "H2 smoothness (mean abs delta_theta per session)",
+            "H2.1 actuator smoothness (mean abs delta_theta per session)",
             "h2_mean_abs_delta_theta",
             lower_is_better=True,
         )
         _write_metric_block(
-            "H2 smoothness (mean abs relative delta_multiplier per session)",
+            "H2.1 actuator smoothness (mean abs relative delta_multiplier per session)",
             "h2_mean_abs_relative_delta_multiplier",
+            lower_is_better=True,
+        )
+        _write_metric_block(
+            "H2.2 challenge smoothness (JumpRate by |delta_challenge01| > tau_jump)",
+            "h2_challenge_jump_rate_tau",
+            lower_is_better=True,
+        )
+        _write_metric_block(
+            "H2.2 challenge smoothness (mean abs delta_challenge01 per session)",
+            "h2_mean_abs_delta_challenge01",
+            lower_is_better=True,
+        )
+        _write_metric_block(
+            "H2.2 challenge smoothness (p95 abs delta_challenge01 per session)",
+            "h2_p95_abs_delta_challenge01",
+            lower_is_better=True,
+        )
+        _write_metric_block(
+            "H2.3 alignment-error smoothness (JumpRate by |delta error| > tau_jump)",
+            "h2_error_jump_rate_tau",
+            lower_is_better=True,
+        )
+        _write_metric_block(
+            "H2.3 alignment-error smoothness (JumpRate by |delta abs_error| > tau_jump)",
+            "h2_abs_error_jump_rate_tau",
+            lower_is_better=True,
+        )
+        _write_metric_block(
+            "H2.3 alignment-error smoothness (mean abs delta error per session)",
+            "h2_mean_abs_delta_error",
+            lower_is_better=True,
+        )
+        _write_metric_block(
+            "H2.3 alignment-error smoothness (p95 abs delta error per session)",
+            "h2_p95_abs_delta_error",
+            lower_is_better=True,
+        )
+        _write_metric_block(
+            "H2.3 alignment-error smoothness (mean abs delta abs_error per session)",
+            "h2_mean_abs_delta_abs_error",
+            lower_is_better=True,
+        )
+        _write_metric_block(
+            "H2.3 alignment-error smoothness (p95 abs delta abs_error per session)",
+            "h2_p95_abs_delta_abs_error",
             lower_is_better=True,
         )
         _write_metric_block(
@@ -884,7 +1010,7 @@ def main() -> int:
             "- This is a *pilot* check: all statistics are computed on **session-level aggregates**; bootstrap CI is shown only as an uncertainty visualization for tiny n.\n"
         )
         f.write(
-            "- H2 now reports continuous smoothness metrics in addition to binary jump-rate; binary zero alone is not evidence *for* smoothness.\n"
+            "- H2 is split into H2.1 actuator smoothness, H2.2 challenge smoothness, and H2.3 skill-challenge mismatch smoothness; binary zero alone is not evidence *for* smoothness.\n"
         )
         f.write(
             "- For H4, we rely on `dda_recovery` events and `recovery_elapsed_seconds`; if sessions contain no recovery events, H4 is not testable there.\n"

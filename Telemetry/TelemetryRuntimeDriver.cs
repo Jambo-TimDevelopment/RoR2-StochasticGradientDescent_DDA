@@ -429,11 +429,20 @@ namespace GeneticsArtifact.Telemetry
 
         private static void CompletePendingSessionEndIfNeeded()
         {
-            if (_pendingSurveySession == null || _pendingSessionEndQueued)
+            if (_pendingSurveySession == null)
             {
                 return;
             }
 
+            if (_pendingSessionEndQueued || _pendingSurveySession.HasSessionEndQueued)
+            {
+                _pendingSessionEndQueued = true;
+                _pendingSurveySession = null;
+                _pendingSurveyEndReason = "";
+                return;
+            }
+
+            _pendingSurveySession.MarkSessionEndQueued();
             TelemetryEventQueue.Enqueue(TelemetrySampleBuilder.BuildSessionEnd(_pendingSurveySession, _pendingSurveyEndReason));
             _pendingSessionEndQueued = true;
             _pendingSurveySession = null;

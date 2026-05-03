@@ -98,14 +98,14 @@ namespace GeneticsArtifact.CheatManager
         {
             switch (normalizedLast)
             {
-                case "FLS":
+                case "SGD":
                     return DdaAlgorithmType.Genetic;
                 case "GA":
+                    return DdaAlgorithmType.Fixed;
+                case "FLS":
                     return DdaAlgorithmType.Sgd;
-                case "SGD":
-                    return DdaAlgorithmType.Fixed;
                 default:
-                    return DdaAlgorithmType.Fixed;
+                    return DdaAlgorithmType.Sgd;
             }
         }
 
@@ -135,9 +135,9 @@ namespace GeneticsArtifact.CheatManager
 
             int index = ClampSeedIndex(ConfigManager.researchCurrentRunSeedIndex.Value, seeds.Count);
 
-            // One seed is shared by a full FLS -> GA -> SGD cycle. Advance only when
-            // starting a new cycle after the previous run was SGD and the next one is FLS.
-            bool startsNewCycle = normalizedLastAlgorithm == "SGD" && nextTelemetryMode == "FLS";
+            // One seed is shared by a full SGD -> GA -> FLS cycle. Advance only when
+            // starting a new cycle after the previous run was FLS and the next one is SGD.
+            bool startsNewCycle = normalizedLastAlgorithm == "FLS" && nextTelemetryMode == "SGD";
             if (startsNewCycle)
             {
                 index = (index + 1) % seeds.Count;

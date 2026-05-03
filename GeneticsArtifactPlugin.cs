@@ -25,8 +25,8 @@ namespace GeneticsArtifact
     [NetworkCompatibility(CompatibilityLevel.EveryoneMustHaveMod, VersionStrictness.EveryoneNeedSameModVersion)]
     public class GeneticsArtifactPlugin : BaseUnityPlugin
     {
-        public const string ModVer = "4.5.4";
-        public const string ModName = "Genetics";
+        public const string ModVer = "4.5.7";
+        public const string ModName = "PainGradient: Suffering Descent";
         public const string ModGuid = "com.RicoValdezio.ArtifactOfGenetics";
         public static GeneticsArtifactPlugin Instance;
         public static ManualLogSource geneticLogSource;

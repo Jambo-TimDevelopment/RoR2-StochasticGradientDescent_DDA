@@ -3,101 +3,109 @@
 ---
 
 <a id="english"></a>
-# GeneticsArtifact (research build)
+# PainGradient: Suffering Descent
 
-## What this is
+*Roguelike scene negotiation: your run might want a **safeword**; the DDA treats that as **optional content**. **PainGradient** is the classy stage name — **Suffering Descent** is the safeword the patch notes forgot to ship.*
 
-A **Risk of Rain 2** mod on **BepInEx**: adds the **Genetics** artifact and a system that adjusts monster stats as fights progress. This build extends the original idea for a master’s thesis on dynamic difficulty (DDA).
+## Quick start (what you do in-game)
 
-## Relation to the original
+1. Install with **r2modman / Thunderstore Mod Manager** (dependencies install automatically).
+2. Start a run and **turn on the Genetics artifact** the same way as in **Rico’s** original mod (challenge, portal code, etc. — see [Rico’s page](https://thunderstore.io/package/Rico/GeneticArtifact/)).
+3. Play normally. Monster **health, damage, and movement/attack speed** can change over time — the mod is built to **squeeze** difficulty, not to coddle.
+4. Optional: open **Risk of Options** → **PainGradient: Suffering Descent** for balance sliders (limits, floors/caps, per-axis tuning).
 
-Based on **GeneticArtifact** by **Rico** on Thunderstore:  
-https://thunderstore.io/package/Rico/GeneticArtifact/
+**You do not need to “launch” anything extra** — it is a normal BepInEx plugin.
 
-The artifact, genetic mode, and core “genes on monsters” idea remain; extra adaptation modes and research features are added. For code details see **GitHub** (link on the Thunderstore package page / repository field).
+## What you’ll notice
 
-## What players should know
+- **In a run**, gene-style multipliers on monsters can adapt as combat goes on.
+- **Between runs**, the mod may **rotate how adaptation works** (fixed-style baseline, classic Rico-like genetics, and an extra adaptive path). That way you get variety without console commands — unless you turn rotation off (below).
 
-- The mod loads like any BepInEx plugin — install via a mod manager (or follow manual layout). Nothing extra to “launch.”
-- **By default, adaptation strategy rotates between new runs**: fixed difficulty, Rico-style genetics, and an extra adaptive mode. You do not need console commands to switch unless you turn that off (see below).
-- In-run, the **Genetics artifact** still matters — enable it the same way as in the original (challenge, portal code, etc.; see Rico’s page).
+## Settings
 
-## In-game settings (**Risk of Options**)
+| Where | What |
+|--------|------|
+| **Risk of Options** → **PainGradient: Suffering Descent** | Most gameplay knobs: learning limits, gene min/max, separate caps for HP / speed / damage style axes. |
+| **BepInEx config** | Advanced / research toggles: auto algorithm rotation, telemetry, etc. |
 
-With **Risk of Options**, the mod appears in the game menu (**Genetics** section): learning limits, gene floors/caps, separate limits for adaptive HP/speed/damage axes, and other balance knobs.
-
-## If you don’t want auto mode rotation or data collection
-
-Extra toggles (auto mode rotation, research telemetry, etc.) live in the **BepInEx config file**, not only Risk of Options:
+Config file path:
 
 `Risk of Rain 2\BepInEx\config\com.RicoValdezio.ArtifactOfGenetics.cfg`
 
-Edit in a text editor if needed:
+Useful options:
 
-- **Research DDA Rotation** — set **Auto Rotate Algorithms** = `false` to stop automatic mode changes between runs;
-- **Research Telemetry** — **Telemetry Enabled** = `false` to disable anonymous research uploads.
+- **Research DDA Rotation** → **Auto Rotate Algorithms** = `false` — stop automatic mode changes between runs.
+- **Research Telemetry** → **Telemetry Enabled** = `false` — opt out of anonymous research uploads to PostHog (does not affect gameplay). The default in a fresh config may be **on** — set to `false` if you want no uploads.
 
-Save and restart the game (or start a new run) as usual for BepInEx configs.
+After edits, restart the game or start a new run as usual for BepInEx configs.
+
+## Relation to the original mod
+
+Fork / research build based on **[GeneticArtifact by Rico](https://thunderstore.io/package/Rico/GeneticArtifact/)**: same in-game **Genetics** artifact and “genes on monsters” core. **PainGradient: Suffering Descent** adds **extra adaptation modes** and **research-oriented** options. Technical architecture (e.g. SGD-style decision loop alongside the classic genetic path) is described on **GitHub** (repository link on the Thunderstore package page).
 
 ## Dependencies
 
-Required mods match the Thunderstore package card (BepInEx, R2API, Risk of Options, etc.) — the mod manager installs them.
+Match the Thunderstore package card (BepInEx, R2API modules, Risk of Options, etc.).
 
 ## Install
 
-Use **r2modman / Thunderstore Mod Manager** or manual layout from the package archive (see Thunderstore docs).
+**r2modman / Thunderstore Mod Manager**, or manual layout from the package zip (see [Thunderstore package format](https://thunderstore.io/package/create/docs/)).
 
 ---
 
-*Full technical docs, experiment design, and source — on GitHub (link in the package description).*
+*Full technical docs and source — GitHub (link in the package description / website field).*
 
 ---
 
 <a id="russian"></a>
-# GeneticsArtifact (исследовательская сборка)
+# PainGradient: Suffering Descent
 
-## Что это
+*Рогаликовая сцена: забег мог бы попросить **стоп-слово**, а алгоритму это **необязательный DLC**. **PainGradient** — артистический псевдоним, **Suffering Descent** — то самое стоп-слово, которое забыли дописать в changelog.*
 
-Мод для **Risk of Rain 2** на базе **BepInEx**: добавляет артефакт **Genetics** и систему, которая подстраивает характеристики монстров под ход боя. Эта сборка развивает оригинальную идею для магистерской работы по динамической сложности (DDA).
+## Быстрый старт (что делать в игре)
 
-## Связь с оригиналом
+1. Установите через **r2modman / Thunderstore Mod Manager** (зависимости подтянутся сами).
+2. В забеге **включите артефакт Genetics** так же, как в **оригинальном моде Rico** (челлендж, код портала и т.д. — см. [страницу Rico](https://thunderstore.io/package/Rico/GeneticArtifact/)).
+3. Играйте как обычно. У монстров со временем могут меняться **здоровье, урон и скорости** — мод заточен **поджимать** сложность, а не обнимать.
+4. По желанию: **Risk of Options** → **PainGradient: Suffering Descent** — ползунки баланса (лимиты, пол/потолок, отдельные оси).
 
-Основа — мод **GeneticArtifact** автора **Rico** на Thunderstore:  
-https://thunderstore.io/package/Rico/GeneticArtifact/
+**Отдельно ничего «запускать» не нужно** — это обычный плагин BepInEx.
 
-Здесь сохранены артефакт, генетический режим и общая идея «генов» у монстров; дополнительно добавлены режимы адаптации сложности и исследовательские функции. Как именно это устроено в коде — см. **GitHub** (ссылка в карточке пакета на Thunderstore, поле сайта / репозитория).
+## Что изменится в игре
 
-## Как это работает для вас
+- **Внутри забега** множители «генов» у монстров могут подстраиваться по ходу боя.
+- **Между забегами** мод может **по очереди менять способ адаптации** (базовый режим, классическая генетика в духе Rico, дополнительный адаптивный режим). Так можно получить разнообразие без консоли — если не отключить ротацию (ниже).
 
-- **Мод подключается сам**, как обычный плагин BepInEx: достаточно установить пакет через менеджер модов (или положить файлы по инструкции менеджера). Отдельно «запускать» мод не нужно.
-- **По умолчанию между новыми забегами сама меняется стратегия адаптации сложности**: по очереди используются три режима — фиксированная сложность, классическая генетика как у Rico, и дополнительный адаптивный режим. Вам не нужно вводить команды, чтобы переключаться между ними, если вы специально не отключите эту логику (см. ниже).
-- Внутри забега по-прежнему важен **артефакт Genetics**: включайте его так же, как в оригинальном моде (челлендж, код портала и т.д. — см. страницу Rico по ссылке выше).
+## Настройки
 
-## Настройки в игре (**Risk of Options**)
+| Где | Что |
+|-----|-----|
+| **Risk of Options** → **PainGradient: Suffering Descent** | Основные игровые параметры: лимиты обучения, мин/макс генов, отдельные ограничения по здоровью / скорости / урону. |
+| **Конфиг BepInEx** | Расширенные / исследовательские опции: автосмена режима, телеметрия и т.д. |
 
-Если установлен **Risk of Options**, в меню игры появятся настройки мода (раздел мода **Genetics**): лимиты обучения, потолки и полы для генов, отдельные ограничения для адаптивного режима по здоровью, скорости и урону и другие параметры баланса. Меняйте их, если хотите смягчить или усилить эффект.
-
-## Если не нужна автосмена режимов или сбор данных
-
-Дополнительные переключатели (автосмена режима между забегами, телеметрия исследования и т.п.) лежат в **файле конфигурации BepInEx**, а не в Risk of Options:
+Путь к конфигу:
 
 `Risk of Rain 2\BepInEx\config\com.RicoValdezio.ArtifactOfGenetics.cfg`
 
-Откройте файл текстовым редактором и при необходимости выставьте:
+Полезные опции:
 
-- секция **Research DDA Rotation** — опция **Auto Rotate Algorithms** = `false`, если хотите, чтобы режим адаптации **не** менялся сам между забегами;
-- секция **Research Telemetry** — **Telemetry Enabled** = `false`, если не хотите отправку анонимных данных для исследования.
+- **Research DDA Rotation** → **Auto Rotate Algorithms** = `false` — режим адаптации **не** меняется сам между забегами.
+- **Research Telemetry** → **Telemetry Enabled** = `false` — отказ от анонимной отправки данных исследования (PostHog); на геймплей не влияет. По умолчанию в конфиге может быть включено — проверьте файл, если хотите отключить.
 
-После правок сохраните файл и перезапустите игру (или смените забег — как обычно для конфигов BepInEx).
+После правок сохраните файл и перезапустите игру или начните новый забег, как обычно для конфигов BepInEx.
+
+## Связь с оригиналом
+
+Исследовательский форк на базе **[GeneticArtifact (Rico)](https://thunderstore.io/package/Rico/GeneticArtifact/)**: тот же внутриигровой артефакт **Genetics** и идея «генов» у монстров. **PainGradient: Suffering Descent** добавляет **дополнительные режимы адаптации** и **опции для исследования**. Устройство в коде (в т.ч. цикл принятия решений в духе SGD рядом с классической генетикой) — в **GitHub** (ссылка в карточке пакета).
 
 ## Зависимости
 
-Список обязательных модов совпадает с карточкой пакета на Thunderstore (BepInEx, R2API, Risk of Options и др.) — менеджер модов подтянет их сам.
+Как в карточке пакета на Thunderstore (BepInEx, модули R2API, Risk of Options и др.).
 
 ## Установка
 
-Через **r2modman / Thunderstore Mod Manager** или вручную по структуре архива пакета (см. документацию Thunderstore).
+**r2modman / Thunderstore Mod Manager** или ручная раскладка из архива (см. [формат пакета Thunderstore](https://thunderstore.io/package/create/docs/)).
 
 ---
 
-*Подробная техническая документация, эксперимент и исходный код — в репозитории на GitHub (ссылка в описании пакета).*
+*Техническая документация и исходный код — GitHub (ссылка в описании пакета / website).*

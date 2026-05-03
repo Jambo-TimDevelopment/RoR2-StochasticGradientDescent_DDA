@@ -115,8 +115,13 @@ Exclude sessions missing degradation start/recovery from `T_recovery` comparison
 
 ```bash
 python tools/analyze_hypotheses_h1_h4.py tools/posthog_exports/ALL_events_*.jsonl
-python tools/analyze_hypotheses_h1_h4.py tools/posthog_exports/ALL_events_*.jsonl --only-huntress
 python tools/analyze_hypotheses_h1_h4.py tools/posthog_exports/ALL_events_*.jsonl --min-schema-version 3
+```
+
+Session-level tools include **all survivors** in the export (`player_body` is not filtered). For subsets, use `--only-mode`, time filters, or split exports manually.
+
+```bash
+python tools/inspect_dda_sessions.py tools/posthog_exports/ALL_events_*.jsonl
 ```
 
 Outputs: `tools/posthog_exports/hypotheses_results/session_metrics_h1_h4.csv`, `summary_h1_h4.md`.
@@ -124,7 +129,7 @@ Outputs: `tools/posthog_exports/hypotheses_results/session_metrics_h1_h4.csv`, `
 Sensor calibration:
 
 ```bash
-python tools/calibrate_sgd_sensors.py tools/posthog_exports/ALL_events_*.jsonl --only-huntress
+python tools/calibrate_sgd_sensors.py tools/posthog_exports/ALL_events_*.jsonl
 ```
 
 Produces `sensor_calibration_hints.md` — candidate thresholds only; finalize manually in experiment config.
@@ -428,10 +433,12 @@ recovery_sessions / degradation_start_sessions
 python tools/analyze_hypotheses_h1_h4.py tools/posthog_exports/ALL_events_*.jsonl
 ```
 
-Анализ только сессий Лучницы/Охотницы:
+По умолчанию учитываются **все персонажи** в выгрузке (фильтра по `player_body` нет). Для подмножеств используйте `--only-mode`, временные окна или разделите JSONL вручную.
+
+Просмотр сессий и полей H2/H4:
 
 ```bash
-python tools/analyze_hypotheses_h1_h4.py tools/posthog_exports/ALL_events_*.jsonl --only-huntress
+python tools/inspect_dda_sessions.py tools/posthog_exports/ALL_events_*.jsonl
 ```
 
 Анализ только новой схемы v3:
@@ -448,7 +455,7 @@ python tools/analyze_hypotheses_h1_h4.py tools/posthog_exports/ALL_events_*.json
 Для проверки распределений сенсоров и подбора диагностических порогов:
 
 ```bash
-python tools/calibrate_sgd_sensors.py tools/posthog_exports/ALL_events_*.jsonl --only-huntress
+python tools/calibrate_sgd_sensors.py tools/posthog_exports/ALL_events_*.jsonl
 ```
 
 Этот скрипт формирует:

@@ -1,4 +1,5 @@
 using GeneticsArtifact.SgdEngine;
+using GeneticsArtifact.CheatManager;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -49,6 +50,7 @@ namespace GeneticsArtifact.Telemetry
     internal sealed class TelemetrySessionState
     {
         public string SessionId { get; private set; } = "";
+        public string SessionMode { get; private set; } = "";
         public float StartedAtUnityTime { get; private set; }
         public int SamplesCount { get; private set; }
         public int RecoveryEventsCount { get; private set; }
@@ -120,6 +122,7 @@ namespace GeneticsArtifact.Telemetry
         public void StartNewRun()
         {
             SessionId = "run-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            SessionMode = DdaAlgorithmState.GetTelemetryMode();
             StartedAtUnityTime = Time.time;
             SamplesCount = 0;
             RecoveryEventsCount = 0;
@@ -329,8 +332,8 @@ namespace GeneticsArtifact.Telemetry
 
         private void UpdateRecovery(in SgdSensorsSample sensors, float meanAbsError, float degradationSignal, float dt)
         {
-            float degradationThreshold = ConfigManager.telemetryDegradationThreshold?.Value ?? 0.70f;
-            float recoveryThreshold = ConfigManager.telemetryRecoveryThreshold?.Value ?? 0.35f;
+            float degradationThreshold = ConfigManager.telemetryDegradationThreshold?.Value ?? 0.30f;
+            float recoveryThreshold = ConfigManager.telemetryRecoveryThreshold?.Value ?? 0.25f;
             UpdateDegradationDiagnosticTimers(degradationSignal, recoveryThreshold, dt);
 
             if (!IsDegraded && degradationSignal >= degradationThreshold)

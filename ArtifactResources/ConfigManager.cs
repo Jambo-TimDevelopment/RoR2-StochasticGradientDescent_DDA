@@ -6,6 +6,11 @@ namespace GeneticsArtifact
 {
     public class ConfigManager
     {
+        private const float CalibratedTelemetryDegradationThreshold = 0.30f;
+        private const float CalibratedTelemetryRecoveryThreshold = 0.25f;
+        private const float LegacyTelemetryDegradationThreshold = 0.70f;
+        private const float LegacyTelemetryRecoveryThreshold = 0.35f;
+
         private static ConfigFile _configFile;
 
         public static ConfigEntry<int> timeLimit, deathLimit, governorType;
@@ -203,13 +208,13 @@ namespace GeneticsArtifact
 
             telemetryDegradationThreshold = configFile.Bind<float>(
                 new ConfigDefinition("Research Telemetry", "Degradation Threshold"),
-                0.70f,
-                new ConfigDescription("Stress signal threshold that starts a degradation episode.", new AcceptableValueRange<float>(0.1f, 1f)));
+                CalibratedTelemetryDegradationThreshold,
+                new ConfigDescription("Stress signal threshold that starts a degradation episode. Calibrated from the pilot distribution around degradation_signal p90.", new AcceptableValueRange<float>(0.1f, 1f)));
 
             telemetryRecoveryThreshold = configFile.Bind<float>(
                 new ConfigDefinition("Research Telemetry", "Recovery Threshold"),
-                0.35f,
-                new ConfigDescription("Stress signal threshold that ends a degradation episode.", new AcceptableValueRange<float>(0f, 0.9f)));
+                CalibratedTelemetryRecoveryThreshold,
+                new ConfigDescription("Stress signal threshold that ends a degradation episode. Keep below Degradation Threshold to preserve hysteresis.", new AcceptableValueRange<float>(0f, 0.9f)));
 
             telemetryMinimumSessionSeconds = configFile.Bind<float>(
                 new ConfigDefinition("Research Telemetry", "Minimum Session Seconds"),
@@ -219,7 +224,7 @@ namespace GeneticsArtifact
             researchAutoRotateDdaAlgorithms = configFile.Bind<bool>(
                 new ConfigDefinition("Research DDA Rotation", "Auto Rotate Algorithms"),
                 true,
-                new ConfigDescription("Automatically rotate hidden DDA mode on each new run: FLS -> GA -> SGD -> FLS."));
+                new ConfigDescription("Automatically rotate hidden DDA mode on each new run: SGD -> GA -> FLS -> SGD."));
 
             researchLastRunDdaAlgorithm = configFile.Bind<string>(
                 new ConfigDefinition("Research DDA Rotation", "Last Run Algorithm"),
@@ -278,6 +283,44 @@ namespace GeneticsArtifact
                 new ConfigDefinition("Diagnostics", "Enable Research Rotator Hooks"),
                 true,
                 new ConfigDescription("Enable research run mode rotator hooks. Keep disabled while diagnosing repeat-run startup errors."));
+
+            MigrateLegacyTelemetryThresholds();
+        }
+
+        private static void MigrateLegacyTelemetryThresholds()
+        {
+            if (telemetryDegradationThreshold == null || telemetryRecoveryThreshold == null)
+            {
+                return;
+            }
+
+            bool changed = false;
+            if (Approximately(telemetryDegradationThreshold.Value, LegacyTelemetryDegradationThreshold))
+            {
+                telemetryDegradationThreshold.Value = CalibratedTelemetryDegradationThreshold;
+                changed = true;
+            }
+
+            if (Approximately(telemetryRecoveryThreshold.Value, LegacyTelemetryRecoveryThreshold))
+            {
+                telemetryRecoveryThreshold.Value = CalibratedTelemetryRecoveryThreshold;
+                changed = true;
+            }
+
+            if (changed)
+            {
+                GeneticsArtifactPlugin.geneticLogSource?.LogInfo(
+                    "[Telemetry] Migrated H4 thresholds to pilot-calibrated values: degradation=" +
+                    CalibratedTelemetryDegradationThreshold.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) +
+                    ", recovery=" +
+                    CalibratedTelemetryRecoveryThreshold.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
+                Save();
+            }
+        }
+
+        private static bool Approximately(float a, float b)
+        {
+            return Math.Abs(a - b) <= 0.0001f;
         }
 
         public static void Save()

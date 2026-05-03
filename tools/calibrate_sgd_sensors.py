@@ -1,3 +1,10 @@
+"""
+Sensor distributions and degradation_signal hints from PostHog `dda_sample` rows.
+
+Uses all sessions in the export; no filter by survivor (`player_body`). Modded characters
+and mixed rosters are expected for field experiments.
+"""
+
 import argparse
 import glob
 import json
@@ -53,24 +60,6 @@ def _safe_float(v):
         return None
 
 
-def _normalize_mojibake(text: str) -> str:
-    if not text:
-        return ""
-    text = str(text)
-    markers = ("Ã", "Ð", "Ñ", "Â", "â", "€", "™")
-    if not any(m in text for m in markers):
-        return text
-    try:
-        return text.encode("latin-1", errors="strict").decode("utf-8", errors="strict")
-    except Exception:
-        return text
-
-
-def _is_huntress(text: str) -> bool:
-    t = _normalize_mojibake(text).strip().lower()
-    return ("охотниц" in t) or ("huntress" in t)
-
-
 def _percentile(values: list[float], q: float) -> float | None:
     if not values:
         return None
@@ -97,11 +86,6 @@ def main() -> int:
     )
     ap.add_argument("inputs", nargs="+", help="JSONL files or globs.")
     ap.add_argument(
-        "--only-huntress",
-        action="store_true",
-        help="Restrict calibration hints to Huntress/Охотница sessions.",
-    )
-    ap.add_argument(
         "--out",
         default=os.path.join("tools", "posthog_exports", "hypotheses_results", "sensor_calibration_hints.md"),
         help="Output markdown report.",
@@ -114,7 +98,6 @@ def main() -> int:
         files.extend(matches if matches else [inp])
     files = [os.path.normpath(p) for p in files]
 
-    session_body: dict[str, str] = {}
     rows: list[dict] = []
     bad_json_lines = 0
 
@@ -130,9 +113,6 @@ def main() -> int:
             session_id = props.get("session_id")
             if not session_id:
                 continue
-            body = props.get("player_body") or props.get("player_body_name") or ""
-            if body and session_id not in session_body:
-                session_body[session_id] = _normalize_mojibake(body)
             if obj.get("event") == "dda_sample":
                 rows.append(props)
 
@@ -141,8 +121,6 @@ def main() -> int:
     for props in rows:
         session_id = props.get("session_id")
         if not session_id:
-            continue
-        if args.only_huntress and not _is_huntress(session_body.get(session_id, "")):
             continue
         sessions.add(session_id)
         for field in SENSOR_FIELDS + RAW_FIELDS:
@@ -159,8 +137,6 @@ def main() -> int:
         f.write(f"- bad_json_lines: {bad_json_lines}\n")
         f.write(f"- samples_used: {len(next(iter(values.values()), [])) if values else 0}\n")
         f.write(f"- sessions_used: {len(sessions)}\n")
-        if args.only_huntress:
-            f.write("- filter: only Huntress/Охотница sessions\n")
 
         f.write("\n## Normalized sensor distributions\n\n")
         for field in SENSOR_FIELDS:

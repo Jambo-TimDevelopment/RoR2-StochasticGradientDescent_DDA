@@ -214,6 +214,7 @@ namespace GeneticsArtifact.Telemetry
         private static Dictionary<string, object> BuildCommonProperties(TelemetrySessionState session)
         {
             var snapshot = TelemetryDifficultySnapshot.Capture();
+            string sessionMode = string.IsNullOrWhiteSpace(session.SessionMode) ? snapshot.Mode : session.SessionMode;
             var props = new Dictionary<string, object>
             {
                 ["distinct_id"] = ConfigManager.telemetryAnonymousUserId.Value,
@@ -235,7 +236,8 @@ namespace GeneticsArtifact.Telemetry
                 ["stage_name"] = Stage.instance?.sceneDef?.baseSceneName ?? "",
                 ["stage_index"] = Run.instance != null ? Run.instance.stageClearCount + 1 : 0,
                 ["player_body"] = SgdSensorsRuntimeState.PlayerBodyName,
-                ["dda_mode"] = snapshot.Mode,
+                ["dda_mode"] = sessionMode,
+                ["dda_mode_current"] = snapshot.Mode,
                 ["artifact_enabled"] = IsArtifactEnabled(),
                 ["is_network_server"] = NetworkServer.active,
                 ["queue_count"] = TelemetryEventQueue.Count,
