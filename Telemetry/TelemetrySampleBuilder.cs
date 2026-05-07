@@ -51,26 +51,108 @@ namespace GeneticsArtifact.Telemetry
             AddAxisProperties(props, "attack_speed", "attackSpeed", asSkill, asChallenge, asError, snapshot.AttackSpeed, session.PreviousAttackSpeedMultiplier, session.PreviousAttackSpeedSkill01, session.PreviousAttackSpeedChallenge01, session.HasPreviousSample, session.IsJump(snapshot.AttackSpeed, session.PreviousAttackSpeedMultiplier));
             AddAxisProperties(props, "attack_damage", "damage", dmgSkill, dmgChallenge, dmgError, snapshot.AttackDamage, session.PreviousAttackDamageMultiplier, session.PreviousAttackDamageSkill01, session.PreviousAttackDamageChallenge01, session.HasPreviousSample, session.IsJump(snapshot.AttackDamage, session.PreviousAttackDamageMultiplier));
 
-            float virtualChallenge = ComputeVirtualChallenge(snapshot);
-            float virtualGapAbs = Mathf.Abs(virtualChallenge - vp.Total);
-            float deltaVirtualPower = vp.Total - session.PreviousVirtualPower;
-            float deltaVirtualChallenge = virtualChallenge - session.PreviousVirtualChallenge;
+            SgdVirtualPowerSample virtualChallengeAxes = H3AxisDecisionState.ComputeVirtualChallengeAxes(snapshot);
+            H3AxisDecisionSnapshot decision = H3AxisDecisionState.BuildSnapshot(snapshot.Mode, vp, virtualChallengeAxes);
+            SgdVirtualPowerSample virtualPowerAxes = decision.VirtualPower;
+            SgdVirtualPowerSample deltaVirtualPowerAxes = decision.DeltaVirtualPower;
+            SgdVirtualPowerSample deltaVirtualChallengeAxes = decision.DeltaVirtualChallenge;
+            float virtualChallenge = decision.VirtualChallenge.Total;
+            float virtualPower = decision.VirtualPower.Total;
+            float virtualGapAbs = Mathf.Abs(virtualChallenge - virtualPower);
+            float virtualGapHpAbs = Mathf.Abs(decision.VirtualChallenge.Hp - virtualPowerAxes.Hp);
+            float virtualGapMoveSpeedAbs = Mathf.Abs(decision.VirtualChallenge.MoveSpeed - virtualPowerAxes.MoveSpeed);
+            float virtualGapAttackSpeedAbs = Mathf.Abs(decision.VirtualChallenge.AttackSpeed - virtualPowerAxes.AttackSpeed);
+            float virtualGapAttackDamageAbs = Mathf.Abs(decision.VirtualChallenge.AttackDamage - virtualPowerAxes.AttackDamage);
+            float virtualGapAxesMeanAbs = (virtualGapHpAbs + virtualGapMoveSpeedAbs + virtualGapAttackSpeedAbs + virtualGapAttackDamageAbs) * 0.25f;
+            float deltaVirtualPower = decision.DeltaVirtualPower.Total;
+            float deltaVirtualChallenge = decision.DeltaVirtualChallenge.Total;
             float meanAbsError = (Mathf.Abs(hpError) + Mathf.Abs(msError) + Mathf.Abs(asError) + Mathf.Abs(dmgError)) * 0.25f;
             float degradationSignal = session.ComputeDegradationSignal(sensors, meanAbsError);
 
-            props["virtual_power_total"] = vp.Total;
-            props["virtual_power_offense"] = vp.Offense;
-            props["virtual_power_defense"] = vp.Defense;
-            props["virtual_power_mobility"] = vp.Mobility;
+            props["virtual_power_total"] = virtualPower;
+            props["virtual_power_hp"] = virtualPowerAxes.Hp;
+            props["virtual_power_move_speed"] = virtualPowerAxes.MoveSpeed;
+            props["virtual_power_attack_speed"] = virtualPowerAxes.AttackSpeed;
+            props["virtual_power_attack_damage"] = virtualPowerAxes.AttackDamage;
+            props["virtual_power_offense"] = virtualPowerAxes.AttackDamage;
+            props["virtual_power_defense"] = virtualPowerAxes.Hp;
+            props["virtual_power_mobility"] = virtualPowerAxes.MoveSpeed;
+            props["virtual_power_observed_total"] = decision.ObservedVirtualPower.Total;
+            props["virtual_power_observed_hp"] = decision.ObservedVirtualPower.Hp;
+            props["virtual_power_observed_move_speed"] = decision.ObservedVirtualPower.MoveSpeed;
+            props["virtual_power_observed_attack_speed"] = decision.ObservedVirtualPower.AttackSpeed;
+            props["virtual_power_observed_attack_damage"] = decision.ObservedVirtualPower.AttackDamage;
+            props["virtual_power_baseline_total"] = decision.BaselineVirtualPower.Total;
+            props["virtual_power_baseline_hp"] = decision.BaselineVirtualPower.Hp;
+            props["virtual_power_baseline_move_speed"] = decision.BaselineVirtualPower.MoveSpeed;
+            props["virtual_power_baseline_attack_speed"] = decision.BaselineVirtualPower.AttackSpeed;
+            props["virtual_power_baseline_attack_damage"] = decision.BaselineVirtualPower.AttackDamage;
             props["virtual_challenge_total"] = virtualChallenge;
+            props["virtual_challenge_hp"] = decision.VirtualChallenge.Hp;
+            props["virtual_challenge_move_speed"] = decision.VirtualChallenge.MoveSpeed;
+            props["virtual_challenge_attack_speed"] = decision.VirtualChallenge.AttackSpeed;
+            props["virtual_challenge_attack_damage"] = decision.VirtualChallenge.AttackDamage;
             props["virtual_gap_abs"] = virtualGapAbs;
+            props["virtual_gap_hp_abs"] = virtualGapHpAbs;
+            props["virtual_gap_move_speed_abs"] = virtualGapMoveSpeedAbs;
+            props["virtual_gap_attack_speed_abs"] = virtualGapAttackSpeedAbs;
+            props["virtual_gap_attack_damage_abs"] = virtualGapAttackDamageAbs;
+            props["virtual_gap_axes_mean_abs"] = virtualGapAxesMeanAbs;
             props["delta_virtual_power"] = deltaVirtualPower;
+            props["delta_virtual_power_hp"] = deltaVirtualPowerAxes.Hp;
+            props["delta_virtual_power_move_speed"] = deltaVirtualPowerAxes.MoveSpeed;
+            props["delta_virtual_power_attack_speed"] = deltaVirtualPowerAxes.AttackSpeed;
+            props["delta_virtual_power_attack_damage"] = deltaVirtualPowerAxes.AttackDamage;
             props["delta_virtual_challenge"] = deltaVirtualChallenge;
+            props["delta_virtual_challenge_hp"] = deltaVirtualChallengeAxes.Hp;
+            props["delta_virtual_challenge_move_speed"] = deltaVirtualChallengeAxes.MoveSpeed;
+            props["delta_virtual_challenge_attack_speed"] = deltaVirtualChallengeAxes.AttackSpeed;
+            props["delta_virtual_challenge_attack_damage"] = deltaVirtualChallengeAxes.AttackDamage;
             props["is_within_stable_error_epsilon"] = meanAbsError <= (ConfigManager.telemetryStableErrorEpsilon?.Value ?? 0.10f);
             props["is_within_virtual_gap_epsilon"] = virtualGapAbs <= (ConfigManager.telemetryVirtualGapEpsilon?.Value ?? 0.50f);
+            props["is_within_virtual_gap_axes_epsilon"] = virtualGapAxesMeanAbs <= (ConfigManager.telemetryVirtualGapEpsilon?.Value ?? 0.50f);
+            props["is_within_virtual_gap_hp_epsilon"] = virtualGapHpAbs <= (ConfigManager.telemetryVirtualGapEpsilon?.Value ?? 0.50f);
+            props["is_within_virtual_gap_move_speed_epsilon"] = virtualGapMoveSpeedAbs <= (ConfigManager.telemetryVirtualGapEpsilon?.Value ?? 0.50f);
+            props["is_within_virtual_gap_attack_speed_epsilon"] = virtualGapAttackSpeedAbs <= (ConfigManager.telemetryVirtualGapEpsilon?.Value ?? 0.50f);
+            props["is_within_virtual_gap_attack_damage_epsilon"] = virtualGapAttackDamageAbs <= (ConfigManager.telemetryVirtualGapEpsilon?.Value ?? 0.50f);
             props["h3_axis_model"] = "damage,attackSpeed,hp,moveSpeed";
+            props["h3_axis_schema"] = "vp_vc_4_axes_decision_v2";
+            props["h3_virtual_power_scale"] = "relative_to_session_baseline";
+            props["h3_virtual_challenge_scale"] = "ln_clamped_multiplier";
+            props["h3_delta_source"] = decision.DeltaSource;
+            props["h3_is_decision_step"] = decision.IsDecisionStep;
+            props["h3_decision_step_index"] = decision.StepIndex;
+            props["h3_decision_step_reason"] = decision.StepReason;
+            props["h3_decision_step_interval_seconds"] = decision.StepIntervalSeconds;
             props["h3_axis_mean_abs_error"] = meanAbsError;
             props["h3_legacy_virtual_gap_abs"] = virtualGapAbs;
+            props["sgd_vp_has_baseline"] = SgdDecisionRuntimeState.HasBaselineVirtualPower;
+            props["sgd_vp_baseline"] = SgdDecisionRuntimeState.BaselineVirtualPowerTotal;
+            props["sgd_vp_baseline_hp"] = SgdDecisionRuntimeState.BaselineVirtualPower.Hp;
+            props["sgd_vp_baseline_move_speed"] = SgdDecisionRuntimeState.BaselineVirtualPower.MoveSpeed;
+            props["sgd_vp_baseline_attack_speed"] = SgdDecisionRuntimeState.BaselineVirtualPower.AttackSpeed;
+            props["sgd_vp_baseline_attack_damage"] = SgdDecisionRuntimeState.BaselineVirtualPower.AttackDamage;
+            props["sgd_vp_delta_for_decision"] = SgdDecisionRuntimeState.LastVirtualPowerDeltaTotal;
+            props["sgd_vp_delta_hp_for_decision"] = SgdDecisionRuntimeState.LastVirtualPowerDelta.Hp;
+            props["sgd_vp_delta_move_speed_for_decision"] = SgdDecisionRuntimeState.LastVirtualPowerDelta.MoveSpeed;
+            props["sgd_vp_delta_attack_speed_for_decision"] = SgdDecisionRuntimeState.LastVirtualPowerDelta.AttackSpeed;
+            props["sgd_vp_delta_attack_damage_for_decision"] = SgdDecisionRuntimeState.LastVirtualPowerDelta.AttackDamage;
+            props["sgd_vc_decision_current"] = SgdDecisionRuntimeState.LastVirtualChallengeTotal;
+            props["sgd_vc_hp_decision_current"] = SgdDecisionRuntimeState.LastVirtualChallenge.Hp;
+            props["sgd_vc_move_speed_decision_current"] = SgdDecisionRuntimeState.LastVirtualChallenge.MoveSpeed;
+            props["sgd_vc_attack_speed_decision_current"] = SgdDecisionRuntimeState.LastVirtualChallenge.AttackSpeed;
+            props["sgd_vc_attack_damage_decision_current"] = SgdDecisionRuntimeState.LastVirtualChallenge.AttackDamage;
+            props["sgd_virtual_error_for_decision"] = SgdDecisionRuntimeState.LastVirtualErrorTotal;
+            props["sgd_virtual_error_hp_for_decision"] = SgdDecisionRuntimeState.LastVirtualError.Hp;
+            props["sgd_virtual_error_move_speed_for_decision"] = SgdDecisionRuntimeState.LastVirtualError.MoveSpeed;
+            props["sgd_virtual_error_attack_speed_for_decision"] = SgdDecisionRuntimeState.LastVirtualError.AttackSpeed;
+            props["sgd_virtual_error_attack_damage_for_decision"] = SgdDecisionRuntimeState.LastVirtualError.AttackDamage;
+            props["sgd_virtual_power_scale"] = SgdDecisionDriver.VirtualPowerScale;
+            props["sgd_virtual_loss_weight"] = SgdDecisionDriver.VirtualPowerLossWeight;
+            props["sgd_hp_virtual_error_contribution"] = SgdDecisionRuntimeState.LastVirtualPowerContributionHp;
+            props["sgd_ms_virtual_error_contribution"] = SgdDecisionRuntimeState.LastVirtualPowerContributionMs;
+            props["sgd_as_virtual_error_contribution"] = SgdDecisionRuntimeState.LastVirtualPowerContributionAs;
+            props["sgd_dmg_virtual_error_contribution"] = SgdDecisionRuntimeState.LastVirtualPowerContributionDmg;
 
             AddPlayerBuildProperties(props, FindAnyPlayerBody());
 
@@ -87,11 +169,11 @@ namespace GeneticsArtifact.Telemetry
                 msChallenge,
                 asChallenge,
                 dmgChallenge,
-                virtualGapAbs,
+                virtualGapAxesMeanAbs,
                 snapshot,
                 sensors,
                 dt);
-            session.SetPreviousVirtuals(vp.Total, virtualChallenge);
+            session.SetPreviousVirtuals(decision.VirtualPower, decision.VirtualChallenge);
 
             props["degradation_signal"] = degradationSignal;
             props["is_degraded"] = session.IsDegraded;
@@ -222,7 +304,7 @@ namespace GeneticsArtifact.Telemetry
                 ["session_id"] = session.SessionId,
                 ["participant_id"] = GetParticipantId(),
                 ["mod_version"] = GeneticsArtifactPlugin.ModVer,
-                ["telemetry_schema_version"] = 3,
+                ["telemetry_schema_version"] = 6,
                 ["experiment_id"] = ConfigManager.telemetryExperimentId.Value,
                 ["condition_order"] = ConfigManager.telemetryConditionOrder.Value,
                 ["run_attempt_index"] = ConfigManager.telemetryRunAttemptIndex.Value,
@@ -320,6 +402,12 @@ namespace GeneticsArtifact.Telemetry
             props["sgd_gradient_clip"] = SgdDecisionDriver.DefaultGradientClip;
             props["sgd_velocity_clip"] = SgdDecisionDriver.DefaultVelocityClip;
             props["sgd_error_dead_zone"] = SgdDecisionDriver.DefaultErrorDeadZone;
+            props["sgd_virtual_power_scale"] = SgdDecisionDriver.VirtualPowerScale;
+            props["sgd_virtual_loss_weight"] = SgdDecisionDriver.VirtualPowerLossWeight;
+            props["sgd_hp_virtual_challenge_weight"] = SgdDecisionDriver.HpVirtualChallengeWeight;
+            props["sgd_ms_virtual_challenge_weight"] = SgdDecisionDriver.MsVirtualChallengeWeight;
+            props["sgd_as_virtual_challenge_weight"] = SgdDecisionDriver.AsVirtualChallengeWeight;
+            props["sgd_dmg_virtual_challenge_weight"] = SgdDecisionDriver.DmgVirtualChallengeWeight;
             props["sgd_hp_learning_rate"] = SgdDecisionDriver.HpLearningRate;
             props["sgd_ms_learning_rate"] = SgdDecisionDriver.MsLearningRate;
             props["sgd_as_learning_rate"] = SgdDecisionDriver.AsLearningRate;
@@ -337,6 +425,8 @@ namespace GeneticsArtifact.Telemetry
             props["sgd_dmg_floor"] = ConfigManager.sgdDmgFloor.Value;
             props["sgd_dmg_cap"] = ConfigManager.sgdDmgCap.Value;
 
+            AddAppliedSgdAxisLimitProperties(props);
+
             props["ga_governor_type"] = ConfigManager.governorType.Value;
             props["ga_time_limit_seconds"] = ConfigManager.timeLimit.Value;
             props["ga_death_limit"] = ConfigManager.deathLimit.Value;
@@ -344,6 +434,30 @@ namespace GeneticsArtifact.Telemetry
             props["ga_gene_cap"] = ConfigManager.geneCap.Value;
             props["ga_gene_floor"] = ConfigManager.geneFloor.Value;
             props["ga_gene_product_limit"] = ConfigManager.geneProductLimit.Value;
+        }
+
+        private static void AddAppliedSgdAxisLimitProperties(Dictionary<string, object> props)
+        {
+            AddAppliedSgdAxisLimitProperties(props, "hp", GeneStat.MaxHealth);
+            AddAppliedSgdAxisLimitProperties(props, "ms", GeneStat.MoveSpeed);
+            AddAppliedSgdAxisLimitProperties(props, "as", GeneStat.AttackSpeed);
+            AddAppliedSgdAxisLimitProperties(props, "dmg", GeneStat.AttackDamage);
+        }
+
+        private static void AddAppliedSgdAxisLimitProperties(Dictionary<string, object> props, string prefix, GeneStat stat)
+        {
+            SgdAxisLimitProvider.GetLimits(stat, out float floor, out float cap);
+            float thetaMin = Mathf.Log(floor);
+            float thetaMax = Mathf.Log(cap);
+            float thetaRange = Mathf.Max(0.0001f, thetaMax - thetaMin);
+            float neutralChallenge01 = Mathf.Clamp01((0f - thetaMin) / thetaRange);
+
+            props["sgd_" + prefix + "_floor_applied"] = floor;
+            props["sgd_" + prefix + "_cap_applied"] = cap;
+            props["sgd_" + prefix + "_theta_min_applied"] = thetaMin;
+            props["sgd_" + prefix + "_theta_max_applied"] = thetaMax;
+            props["sgd_" + prefix + "_theta_range_applied"] = thetaRange;
+            props["sgd_" + prefix + "_neutral_challenge01"] = neutralChallenge01;
         }
 
         private static void AddPlayerBuildProperties(Dictionary<string, object> props, CharacterBody body)
@@ -367,9 +481,22 @@ namespace GeneticsArtifact.Telemetry
             props["player_move_speed"] = body.moveSpeed;
 
             var raw = SgdVirtualPowerEstimator.ComputeRaw(body);
-            props["virtual_power_raw_offense"] = raw.Offense;
-            props["virtual_power_raw_defense"] = raw.Defense;
-            props["virtual_power_raw_mobility"] = raw.Mobility;
+            var itemBonus = SgdBuildPowerItemModel.EstimateInventoryBonus(body.inventory);
+            props["virtual_power_raw_hp"] = raw.Hp;
+            props["virtual_power_raw_move_speed"] = raw.MoveSpeed;
+            props["virtual_power_raw_attack_speed"] = raw.AttackSpeed;
+            props["virtual_power_raw_attack_damage"] = raw.AttackDamage;
+            props["virtual_power_raw_offense"] = raw.AttackDamage;
+            props["virtual_power_raw_defense"] = raw.Hp;
+            props["virtual_power_raw_mobility"] = raw.MoveSpeed;
+            props["virtual_power_item_bonus_hp"] = itemBonus.Hp;
+            props["virtual_power_item_bonus_move_speed"] = itemBonus.MoveSpeed;
+            props["virtual_power_item_bonus_attack_speed"] = itemBonus.AttackSpeed;
+            props["virtual_power_item_bonus_attack_damage"] = itemBonus.AttackDamage;
+            props["virtual_power_weight_hp"] = SgdVirtualPowerEstimator.WeightHp;
+            props["virtual_power_weight_move_speed"] = SgdVirtualPowerEstimator.WeightMoveSpeed;
+            props["virtual_power_weight_attack_speed"] = SgdVirtualPowerEstimator.WeightAttackSpeed;
+            props["virtual_power_weight_attack_damage"] = SgdVirtualPowerEstimator.WeightAttackDamage;
             props["virtual_power_weight_offense"] = SgdVirtualPowerEstimator.WeightOffense;
             props["virtual_power_weight_defense"] = SgdVirtualPowerEstimator.WeightDefense;
             props["virtual_power_weight_mobility"] = SgdVirtualPowerEstimator.WeightMobility;
@@ -553,11 +680,29 @@ namespace GeneticsArtifact.Telemetry
 
         private static float ComputeVirtualChallenge(TelemetryDifficultySnapshot snapshot)
         {
-            float hp = SafeLog(snapshot.MaxHealth);
-            float ms = SafeLog(snapshot.MoveSpeed);
-            float attackSpeed = SafeLog(snapshot.AttackSpeed);
-            float attackDamage = SafeLog(snapshot.AttackDamage);
-            return (0.35f * hp) + (0.15f * ms) + (0.20f * attackSpeed) + (0.30f * attackDamage);
+            var axes = ComputeVirtualChallengeAxes(snapshot);
+            return (SgdDecisionDriver.HpVirtualChallengeWeight * axes.Hp) +
+                   (SgdDecisionDriver.MsVirtualChallengeWeight * axes.MoveSpeed) +
+                   (SgdDecisionDriver.AsVirtualChallengeWeight * axes.AttackSpeed) +
+                   (SgdDecisionDriver.DmgVirtualChallengeWeight * axes.AttackDamage);
+        }
+
+        private static SgdVirtualPowerSample ComputeVirtualChallengeAxes(TelemetryDifficultySnapshot snapshot)
+        {
+            return new SgdVirtualPowerSample(
+                hp: SafeLog(snapshot.MaxHealth),
+                moveSpeed: SafeLog(snapshot.MoveSpeed),
+                attackSpeed: SafeLog(snapshot.AttackSpeed),
+                attackDamage: SafeLog(snapshot.AttackDamage));
+        }
+
+        private static SgdVirtualPowerSample Subtract(in SgdVirtualPowerSample a, in SgdVirtualPowerSample b)
+        {
+            return new SgdVirtualPowerSample(
+                hp: a.Hp - b.Hp,
+                moveSpeed: a.MoveSpeed - b.MoveSpeed,
+                attackSpeed: a.AttackSpeed - b.AttackSpeed,
+                attackDamage: a.AttackDamage - b.AttackDamage);
         }
 
         private static bool IsArtifactEnabled()

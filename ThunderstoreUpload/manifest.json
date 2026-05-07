@@ -1,8 +1,8 @@
 {
     "name": "PainGradient",
-    "version_number": "4.5.7",
+    "version_number": "4.5.11",
     "website_url": "https://github.com/Jambo-TimDevelopment/RoR2-StochasticGradientDescent_DDA",
-    "description": "PainGradient — Suffering Descent: dynamic difficulty that keeps monsters mean. HP, damage, and speeds adapt as the run goes on. Built to test a DDA algorithm in an ITMO master's thesis (student research).",
+    "description": "PainGradient: gradient-descent DDA (not GA). Dynamic difficulty: HP, damage, speeds adapt. Genetics artifact Rico-style. Risk of Options. Research fork; telemetry: README/cfg.",
     "dependencies": [
         "bbepis-BepInExPack-5.4.2113",
         "RiskofThunder-HookGenPatcher-1.2.3",

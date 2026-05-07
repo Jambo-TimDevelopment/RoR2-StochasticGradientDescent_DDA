@@ -297,6 +297,7 @@ namespace GeneticsArtifact.Telemetry
             float dt = Time.deltaTime;
             _sampleTimer += dt;
             _flushTimer += dt;
+            H3GaDecisionObserver.TickSubscribe();
 
             float sampleInterval = Mathf.Max(1f, ConfigManager.telemetrySampleIntervalSeconds.Value);
             if (_sampleTimer >= sampleInterval)

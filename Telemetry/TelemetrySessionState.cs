@@ -78,6 +78,8 @@ namespace GeneticsArtifact.Telemetry
         public float PreviousAttackDamageChallenge01 { get; private set; }
         public float PreviousVirtualPower { get; private set; }
         public float PreviousVirtualChallenge { get; private set; }
+        public SgdVirtualPowerSample PreviousVirtualPowerAxes { get; private set; }
+        public SgdVirtualPowerSample PreviousVirtualChallengeAxes { get; private set; }
 
         public float SumAbsErrorMaxHealth { get; private set; }
         public float SumAbsErrorMoveSpeed { get; private set; }
@@ -121,6 +123,8 @@ namespace GeneticsArtifact.Telemetry
 
         public void StartNewRun()
         {
+            H3AxisDecisionState.Reset();
+            H3GaDecisionObserver.Reset();
             SessionId = "run-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
             SessionMode = DdaAlgorithmState.GetTelemetryMode();
             StartedAtUnityTime = Time.time;
@@ -148,6 +152,8 @@ namespace GeneticsArtifact.Telemetry
             PreviousAttackDamageChallenge01 = 0f;
             PreviousVirtualPower = 0f;
             PreviousVirtualChallenge = 0f;
+            PreviousVirtualPowerAxes = default;
+            PreviousVirtualChallengeAxes = default;
             SumAbsErrorMaxHealth = 0f;
             SumAbsErrorMoveSpeed = 0f;
             SumAbsErrorAttackSpeed = 0f;
@@ -301,6 +307,14 @@ namespace GeneticsArtifact.Telemetry
         {
             PreviousVirtualPower = virtualPower;
             PreviousVirtualChallenge = virtualChallenge;
+        }
+
+        public void SetPreviousVirtuals(in SgdVirtualPowerSample virtualPower, in SgdVirtualPowerSample virtualChallenge)
+        {
+            PreviousVirtualPowerAxes = virtualPower;
+            PreviousVirtualChallengeAxes = virtualChallenge;
+            PreviousVirtualPower = virtualPower.Total;
+            PreviousVirtualChallenge = virtualChallenge.Total;
         }
 
         private void RecordJump(float current, float previous)
