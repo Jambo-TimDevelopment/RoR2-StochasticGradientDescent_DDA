@@ -196,9 +196,10 @@ namespace GeneticsArtifact.CheatManager
                         $"Time: {Time.time:F1}s\n" +
                         $"Algorithm: {DdaAlgorithmState.ActiveAlgorithm}\n" +
                         $"Body: {SgdRuntimeState.VirtualPowerBodyName}\n" +
-                        $"V_p.offense: {vp.Offense:F3}\n" +
-                        $"V_p.defense: {vp.Defense:F3}\n" +
-                        $"V_p.mobility: {vp.Mobility:F3}\n" +
+                        $"V_p.hp: {vp.Hp:F3}\n" +
+                        $"V_p.moveSpeed: {vp.MoveSpeed:F3}\n" +
+                        $"V_p.attackSpeed: {vp.AttackSpeed:F3}\n" +
+                        $"V_p.attackDamage: {vp.AttackDamage:F3}\n" +
                         $"V_p.total: {vp.Total:F3}\n\n" +
                         actuatorsText + "\n" +
                         decisionText + "\n" +

@@ -53,6 +53,10 @@ Use `GeneticsArtifactPlugin.geneticLogSource` (or the mod’s `ManualLogSource`)
 
 From `telemetry_schema_version = 3`, H1–H4 use session aggregates and four planes: `damage` ↔ `AttackDamage`, `attackSpeed` ↔ `AttackSpeed`, `hp` ↔ `MaxHealth`, `moveSpeed` ↔ `MoveSpeed`. One actuator per plane; do not fold them into one “monster difficulty” scalar vs \(V_p\). `regen` is auxiliary inside `hp`, not a fifth axis. `axis_*` fields and skill weights: [`Axes.md`](Axes.md#english).
 
+**v4** adds: (1) applied SGD axis limits on each event — `sgd_{hp,ms,as,dmg}_floor_applied`, `sgd_*_cap_applied`, `sgd_*_theta_min_applied`, `sgd_*_theta_max_applied`, `sgd_*_theta_range_applied`, `sgd_*_neutral_challenge01`; (2) virtual-power compensation diagnostics from the SGD decision step — `sgd_vp_has_baseline`, `sgd_vp_baseline`, `sgd_vp_delta_for_decision`, `sgd_vc_decision_current`, `sgd_virtual_error_for_decision`, `sgd_virtual_power_scale`, `sgd_virtual_loss_weight`, `sgd_{hp,ms,as,dmg}_virtual_error_contribution`, `sgd_*_virtual_challenge_weight`. Analyses that need these fields should filter `telemetry_schema_version >= 4`.
+
+**v5** replaces the formal H3 signal with four-axis build power and virtual challenge fields aligned with the SGD actuators: `virtual_power_{hp,move_speed,attack_speed,attack_damage}`, `virtual_challenge_*`, `delta_virtual_power_*`, `delta_virtual_challenge_*`, `virtual_gap_*_abs`, `virtual_gap_axes_mean_abs`, `is_within_virtual_gap_axes_epsilon`, `h3_axis_schema = vp_vc_4_axes_v1`. Legacy total fields (`virtual_power_total`, `virtual_challenge_total`, `virtual_gap_abs`, `delta_virtual_power`, `delta_virtual_challenge`) remain for compatibility. Analyses for the corrected H3 should filter `telemetry_schema_version >= 5`.
+
 #### Session quality
 
 The analysis unit is a **session**, not each `dda_sample`. Samples are a time series and autocorrelated — do not inflate N by treating every tick as independent.
@@ -71,33 +75,39 @@ MAE_align_session = mean(axis_*_abs_error)
 
 Compare distributions so \(E[\text{MAE\_align}]_{\text{SGD}} < E[\text{MAE\_align}]_{\text{FLS}}\) and vs GA. Report counts, mean/median, plots, CIs for SGD−FLS and SGD−GA; bootstrap CIs are illustrative only in pilots.
 
-#### H2: smoothness of difficulty dynamics
+#### H2: smoothness of the skill–challenge misalignment **trajectory**
 
-`axis_*_is_jump` is supplementary; prefer continuous smoothness metrics. SGD steps are small, so `telemetryJumpThreshold = 0.10` can yield `JumpRate = 0` while adaptation still happens.
+Thesis-level **H2** is the **dynamics** of misalignment, not only its level (that is **H1**): fewer / less severe **jumps** in the error between perceived challenge and estimated skill, i.e. the trajectory of `e_i = challenge01_i - skill01_i`.
 
-Schema v3 fields: `axis_*_delta_multiplier`, `axis_*_abs_delta_multiplier`, `axis_*_delta_theta`, `axis_*_abs_delta_theta`, `axis_*_relative_delta_multiplier`, `axis_*_abs_relative_delta_multiplier`, `axis_*_is_jump`.
+**Primary checks (H2.3 in `analyze_hypotheses_h1_h4.py`):** session aggregates such as `P(|Δe_i| > τ_jump)`, `P(|Δ abs_error| > τ_jump)` over axes, plus mean/p95 of `|Δe|` and mirrored `abs_error` step stats. Lower jump rates / smaller step magnitudes ⇒ smoother **error trajectory**.
+
+**Auxiliary splits:** **H2.1** — actuator / `delta_multiplier` jump stats (where roughness enters the knobs); **H2.2** — target `challenge01` jump stats (where roughness enters the setpoint). They **do not replace** the primary H2 wording; they explain *where* roughness comes from if H2.3 vs H2.1/H2.2 disagree.
+
+`axis_*_is_jump` on multipliers remains supplementary. SGD can yield near-zero multiplier jump rates while still adapting — always interpret multiplier jump metrics **together with** the **error-trajectory** metrics above.
+
+Schema v3 fields (non-exhaustive): per-axis `delta_challenge01`, `delta_skill01` / errors, `axis_*_delta_multiplier`, `axis_*_abs_delta_multiplier`, `axis_*_delta_theta`, `axis_*_relative_delta_multiplier`, `axis_*_is_jump`, `tau_jump`.
 
 ```text
-JumpRate_session = count(axis_*_is_jump = true) / count(axis observations)
-MeanAbsDelta_session = mean(axis_*_abs_delta_multiplier)
-P95AbsDelta_session = p95(axis_*_abs_delta_multiplier)
-MeanAbsDeltaTheta_session = mean(axis_*_abs_delta_theta)
-MeanAbsRelativeDelta_session = mean(axis_*_abs_relative_delta_multiplier)
-```
+# Primary H2.3-style (see script for exact pooling across axes/samples)
+ErrorJumpRate_session ≈ mean( |Δe_axis| > tau_jump )
+MeanAbsDeltaError_session = mean(|Δe_axis|)
 
-Lower continuous metrics mean smoother adaptation. Interpret `JumpRate` together with mean/p95/max deltas.
+# Auxiliary H2.1-style
+JumpRate_tau_session ≈ mean( |axis_*_delta_multiplier| > tau_jump )
+MeanAbsDelta_session = mean(axis_*_abs_delta_multiplier)
+```
 
 #### H3: compensating power growth across four planes
 
-Do **not** validate H3 only via `virtual_power_total` vs `virtual_challenge_total` (different scales/spaces). Primary H3 is within the four planes. Fields: `axis_*_plane`, `axis_*_skill01`, `axis_*_challenge01`, `axis_*_error`, `axis_*_abs_error`, `axis_*_delta_skill01`, `axis_*_delta_challenge01`.
+Do **not** validate H3 only via `virtual_power_total` vs `virtual_challenge_total` (different scales/spaces). From schema v5, primary H3 is the four-axis virtual power/challenge compensation over `hp`, `move_speed`, `attack_speed`, `attack_damage`. Fields: `virtual_power_*`, `virtual_challenge_*`, `delta_virtual_power_*`, `delta_virtual_challenge_*`, `virtual_gap_*_abs`.
 
 ```text
-H3_axis_MAE_session = mean(axis_*_abs_error)
-StableRate_session = count(axis_*_abs_error <= epsilon_stable) / count(axis observations)
-AxisCoupling_session = corr(delta_skill_i, delta_challenge_i)
+H3_axis_gap_session = mean(virtual_gap_*_abs)
+H3_axis_coupling_session = mean(corr(delta_virtual_power_i, delta_virtual_challenge_i))
+H3_axis_within_epsilon = mean(virtual_gap_*_abs <= epsilon_v)
 ```
 
-Interpret coupling cautiously; consider lagged correlation `corr(delta_skill_i(t), delta_challenge_i(t+1))`. Keep `virtual_power_total`, `virtual_challenge_total`, `virtual_gap_abs`, `delta_virtual_power`, `delta_virtual_challenge` as diagnostic legacy only, not the main H3 criterion.
+Interpret coupling cautiously; consider lagged correlation `corr(delta_virtual_power_i(t), delta_virtual_challenge_i(t+1))`. Keep `virtual_power_total`, `virtual_challenge_total`, `virtual_gap_abs`, `delta_virtual_power`, `delta_virtual_challenge` as diagnostic legacy only, not the main H3 criterion.
 
 #### H4: recovery after degradation
 
@@ -284,6 +294,10 @@ Overlay удобно реализовать как простой текстов
 
 Начиная с `telemetry_schema_version = 3`, H1–H4 опираются на сессионные агрегаты и четыре плоскости: `damage` ↔ `AttackDamage`, `attackSpeed` ↔ `AttackSpeed`, `hp` ↔ `MaxHealth`, `moveSpeed` ↔ `MoveSpeed`. У каждой — один актуатор; смешивать их в один скаляр «сложности монстров» для сравнения с \(V_p\) нельзя. `regen` только как вспомогательный сигнал внутри `hp`, не как пятая ось. Соответствие полей `axis_*` и весов skill — [`Axes.md`](Axes.md#russian).
 
+**v4** добавляет: (1) снимки применённых лимитов SGD на каждом событии — `sgd_{hp,ms,as,dmg}_floor_applied`, `sgd_*_cap_applied`, `sgd_*_theta_min_applied`, `sgd_*_theta_max_applied`, `sgd_*_theta_range_applied`, `sgd_*_neutral_challenge01`; (2) диагностику компенсации виртуальной мощности из шага SGD — `sgd_vp_has_baseline`, `sgd_vp_baseline`, `sgd_vp_delta_for_decision`, `sgd_vc_decision_current`, `sgd_virtual_error_for_decision`, `sgd_virtual_power_scale`, `sgd_virtual_loss_weight`, `sgd_{hp,ms,as,dmg}_virtual_error_contribution`, `sgd_*_virtual_challenge_weight`. Для анализов, где эти поля обязательны, фильтруйте `telemetry_schema_version >= 4`.
+
+**v5** переводит формальную H3 на четыре оси виртуальной мощности и вызова, совпадающие с актуаторами SGD: `virtual_power_{hp,move_speed,attack_speed,attack_damage}`, `virtual_challenge_*`, `delta_virtual_power_*`, `delta_virtual_challenge_*`, `virtual_gap_*_abs`, `virtual_gap_axes_mean_abs`, `is_within_virtual_gap_axes_epsilon`, `h3_axis_schema = vp_vc_4_axes_v1`. Legacy total-поля (`virtual_power_total`, `virtual_challenge_total`, `virtual_gap_abs`, `delta_virtual_power`, `delta_virtual_challenge`) остаются для совместимости. Для исправленной H3 фильтруйте `telemetry_schema_version >= 5`.
+
 #### Качество сессии
 
 Для магистерского отчета единица анализа - игровая сессия, а не отдельный `dda_sample`. Сэмплы внутри сессии являются временным рядом и автокоррелированы, поэтому по ним нельзя искусственно увеличивать размер выборки.
@@ -326,68 +340,52 @@ E[MAE_align]_SGD < E[MAE_align]_GA
 
 Для отчета показывать: число сессий по режимам, среднее/медиану, box/violin plot, доверительный интервал разности `SGD - FLS` и `SGD - GA`. В пилотных данных bootstrap-ДИ можно использовать только как визуализацию неопределенности, не как строгий статистический вывод.
 
-#### H2: плавность динамики сложности
+#### H2: плавность **траектории** рассогласования skill–challenge
 
-Бинарное поле `axis_*_is_jump` оставлено как дополнительный индикатор, но основная проверка H2 должна использовать непрерывные метрики плавности. Причина: SGD обновляет множители малыми шагами, поэтому порог `telemetryJumpThreshold = 0.10` может давать `JumpRate = 0` даже при реальной адаптации.
+**H1** отвечает за **величину** среднего рассогласования (`MAE` по `axis_*_abs_error`). **H2** — за **динамику** рассогласования: насколько редко траектория ошибки `e_i = challenge01_i - skill01_i` делает **резкие скачки** (меньше `P(|Δe_i| > τ_jump)` и связанных средних/p95 шага `|Δe|`). Это **основная** операционализация H2 (**H2.3** в `analyze_hypotheses_h1_h4.py`).
 
-В телеметрии schema v3 используются поля:
+**Вспомогательно:** **H2.1** — скачки применённых множителей `m_i` по осям; **H2.2** — скачки целевого `challenge01`. Они **не заменяют** формулировку H2, а показывают, **где** возникает резкость, если траектория `e_i` и актуаторы ведут себя по-разному.
 
-- `axis_*_delta_multiplier`;
-- `axis_*_abs_delta_multiplier`;
-- `axis_*_delta_theta`;
-- `axis_*_abs_delta_theta`;
-- `axis_*_relative_delta_multiplier`;
-- `axis_*_abs_relative_delta_multiplier`;
-- `axis_*_is_jump`.
+Бинарное `axis_*_is_jump` по множителям остаётся дополнительным индикатором; у SGD часто малые шаги множителя и `JumpRate = 0` при ненулевой адаптации — поэтому по **основной** H2 ориентируйтесь на метрики **траектории ошибки** (H2.3), а множители и `challenge01` читайте вместе с ними.
 
-На уровне сессии считать:
+В телеметрии schema v3 (фрагмент): приращения `challenge01`/`skill01`/ошибки по оси, `axis_*_delta_multiplier`, `axis_*_abs_delta_multiplier`, `axis_*_delta_theta`, `axis_*_relative_delta_multiplier`, `axis_*_is_jump`, `tau_jump`.
 
 ```text
-JumpRate_session = count(axis_*_is_jump = true) / count(axis observations)
+# Ядро H2.3 (в скрипте — точное объединение по осям/сэмплам)
+ErrorJumpRate_session ≈ mean( |Δe_axis| > tau_jump )
+
+# Вспомогательное H2.1
+JumpRate_tau_session ≈ mean( |axis_*_delta_multiplier| > tau_jump )
 MeanAbsDelta_session = mean(axis_*_abs_delta_multiplier)
-P95AbsDelta_session = p95(axis_*_abs_delta_multiplier)
-MeanAbsDeltaTheta_session = mean(axis_*_abs_delta_theta)
-MeanAbsRelativeDelta_session = mean(axis_*_abs_relative_delta_multiplier)
 ```
 
-Для H2 меньшее значение непрерывных метрик означает более плавную адаптацию. `JumpRate = 0` сам по себе не доказывает плавность; он должен интерпретироваться вместе с `mean/p95/max` изменений.
+Меньшие доли скачков и меньшие средние/p95 шага для **ошибки** означают более плавную траекторию рассогласования. `JumpRate = 0` только по множителю **не** доказывает выполнение H2.
 
 #### H3: компенсация роста мощности по четырем плоскостям
 
-H3 нельзя проверять через прямое сравнение `virtual_power_total` и `virtual_challenge_total`, потому что это разные шкалы и разные пространства признаков. Основная проверка H3 проводится только внутри четырех плоскостей:
+H3 нельзя проверять через прямое сравнение `virtual_power_total` и `virtual_challenge_total`, потому что это разные шкалы и разные пространства признаков. Начиная со schema v5, основная проверка H3 проводится по четырем осям виртуальной мощности/сложности: `hp`, `move_speed`, `attack_speed`, `attack_damage`.
 
-- `damage`;
-- `attackSpeed`;
-- `hp`;
-- `moveSpeed`.
+В телеметрии используются `virtual_power_*`, `virtual_challenge_*`, `delta_virtual_power_*`, `delta_virtual_challenge_*`, `virtual_gap_*_abs`.
 
-В телеметрии используются:
-
-- `axis_*_plane`;
-- `axis_*_skill01`;
-- `axis_*_challenge01`;
-- `axis_*_error`;
-- `axis_*_abs_error`;
-- `axis_*_delta_skill01`;
-- `axis_*_delta_challenge01`.
-
-Основной показатель близости:
+Основные показатели:
 
 ```text
-H3_axis_MAE_session = mean(axis_*_abs_error)
+H3_axis_gap_session = mean(virtual_gap_*_abs)
+H3_axis_coupling_session = mean(corr(delta_virtual_power_i, delta_virtual_challenge_i))
+H3_axis_within_epsilon = mean(virtual_gap_*_abs <= epsilon_v)
 ```
 
-Дополнительно:
+Дополнительно старые axis skill/challenge поля полезны для связи с H1/H2:
 
 ```text
 StableRate_session = count(axis_*_abs_error <= epsilon_stable) / count(axis observations)
 AxisCoupling_session = corr(delta_skill_i, delta_challenge_i)
 ```
 
-`AxisCoupling_session` интерпретируется осторожно: SGD реагирует дискретно и с задержкой, поэтому для финального анализа желательно также проверять лаговую связь:
+`H3_axis_coupling_session` интерпретируется осторожно: SGD реагирует дискретно и с задержкой, поэтому для финального анализа желательно также проверять лаговую связь:
 
 ```text
-corr(delta_skill_i(t), delta_challenge_i(t + 1))
+corr(delta_virtual_power_i(t), delta_virtual_challenge_i(t + 1))
 ```
 
 Поля `virtual_power_total`, `virtual_challenge_total`, `virtual_gap_abs`, `delta_virtual_power`, `delta_virtual_challenge` можно оставлять в отчете только как диагностические legacy-показатели. Они не должны быть главным критерием H3.

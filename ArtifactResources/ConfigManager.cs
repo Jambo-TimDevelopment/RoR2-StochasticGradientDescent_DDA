@@ -10,6 +10,14 @@ namespace GeneticsArtifact
         private const float CalibratedTelemetryRecoveryThreshold = 0.25f;
         private const float LegacyTelemetryDegradationThreshold = 0.70f;
         private const float LegacyTelemetryRecoveryThreshold = 0.35f;
+        private const float DefaultSgdHpFloor = 0.50f;
+        private const float DefaultSgdHpCap = 2.00f;
+        private const float DefaultSgdMsFloor = 0.80f;
+        private const float DefaultSgdMsCap = 1.25f;
+        private const float DefaultSgdAsFloor = 0.60f;
+        private const float DefaultSgdAsCap = 1.6667f;
+        private const float DefaultSgdDmgFloor = 0.60f;
+        private const float DefaultSgdDmgCap = 1.6667f;
 
         private static ConfigFile _configFile;
 
@@ -97,42 +105,42 @@ namespace GeneticsArtifact
                 new ConfigDescription("Scale for normalizing hit rate (hits/sec) into [0..1]. Higher => less sensitive.", new AcceptableValueRange<float>(0.1f, 10f)));
 
             // --- SGD / per-axis multiplier limits ---
-            // Keep defaults aligned with global mutation defaults to preserve behavior unless overridden.
+            // Defaults are log-symmetric around 1.0 so neutral difficulty maps to challenge01 ~= 0.5.
             sgdHpFloor = configFile.Bind<float>(
                 new ConfigDefinition("SGD Axis Limits", "HP Floor"),
-                0.01f,
-                new ConfigDescription("Minimum SGD multiplier for MaxHealth axis.", new AcceptableValueRange<float>(0.01f, 1f)));
+                DefaultSgdHpFloor,
+                new ConfigDescription("Minimum SGD multiplier for MaxHealth axis. Default is log-symmetric with HP Cap around 1.0.", new AcceptableValueRange<float>(0.01f, 1f)));
             sgdHpCap = configFile.Bind<float>(
                 new ConfigDefinition("SGD Axis Limits", "HP Cap"),
-                10f,
-                new ConfigDescription("Maximum SGD multiplier for MaxHealth axis.", new AcceptableValueRange<float>(1f, 50f)));
+                DefaultSgdHpCap,
+                new ConfigDescription("Maximum SGD multiplier for MaxHealth axis. Default is log-symmetric with HP Floor around 1.0.", new AcceptableValueRange<float>(1f, 50f)));
 
             sgdMsFloor = configFile.Bind<float>(
                 new ConfigDefinition("SGD Axis Limits", "MoveSpeed Floor"),
-                0.01f,
-                new ConfigDescription("Minimum SGD multiplier for MoveSpeed axis.", new AcceptableValueRange<float>(0.01f, 1f)));
+                DefaultSgdMsFloor,
+                new ConfigDescription("Minimum SGD multiplier for MoveSpeed axis. Kept narrow because move speed changes are highly perceptible.", new AcceptableValueRange<float>(0.01f, 1f)));
             sgdMsCap = configFile.Bind<float>(
                 new ConfigDefinition("SGD Axis Limits", "MoveSpeed Cap"),
-                10f,
-                new ConfigDescription("Maximum SGD multiplier for MoveSpeed axis.", new AcceptableValueRange<float>(1f, 50f)));
+                DefaultSgdMsCap,
+                new ConfigDescription("Maximum SGD multiplier for MoveSpeed axis. Kept narrow because move speed changes are highly perceptible.", new AcceptableValueRange<float>(1f, 50f)));
 
             sgdAsFloor = configFile.Bind<float>(
                 new ConfigDefinition("SGD Axis Limits", "AttackSpeed Floor"),
-                0.01f,
-                new ConfigDescription("Minimum SGD multiplier for AttackSpeed axis.", new AcceptableValueRange<float>(0.01f, 1f)));
+                DefaultSgdAsFloor,
+                new ConfigDescription("Minimum SGD multiplier for AttackSpeed axis. Default is log-symmetric with AttackSpeed Cap around 1.0.", new AcceptableValueRange<float>(0.01f, 1f)));
             sgdAsCap = configFile.Bind<float>(
                 new ConfigDefinition("SGD Axis Limits", "AttackSpeed Cap"),
-                10f,
-                new ConfigDescription("Maximum SGD multiplier for AttackSpeed axis.", new AcceptableValueRange<float>(1f, 50f)));
+                DefaultSgdAsCap,
+                new ConfigDescription("Maximum SGD multiplier for AttackSpeed axis. Default is log-symmetric with AttackSpeed Floor around 1.0.", new AcceptableValueRange<float>(1f, 50f)));
 
             sgdDmgFloor = configFile.Bind<float>(
                 new ConfigDefinition("SGD Axis Limits", "AttackDamage Floor"),
-                0.01f,
-                new ConfigDescription("Minimum SGD multiplier for AttackDamage axis.", new AcceptableValueRange<float>(0.01f, 1f)));
+                DefaultSgdDmgFloor,
+                new ConfigDescription("Minimum SGD multiplier for AttackDamage axis. Default is log-symmetric with AttackDamage Cap around 1.0.", new AcceptableValueRange<float>(0.01f, 1f)));
             sgdDmgCap = configFile.Bind<float>(
                 new ConfigDefinition("SGD Axis Limits", "AttackDamage Cap"),
-                10f,
-                new ConfigDescription("Maximum SGD multiplier for AttackDamage axis.", new AcceptableValueRange<float>(1f, 50f)));
+                DefaultSgdDmgCap,
+                new ConfigDescription("Maximum SGD multiplier for AttackDamage axis. Default is log-symmetric with AttackDamage Floor around 1.0.", new AcceptableValueRange<float>(1f, 50f)));
 
             // --- Research telemetry ---
             telemetryEnabled = configFile.Bind<bool>(

@@ -60,9 +60,9 @@ flowchart TD
   postHogClient --> postHogCloud[PostHogCloud]
 ```
 
-Events are sent to PostHog via `/batch/`; schema version is `telemetry_schema_version` (docs refer to v2 and v3). Main event names: `dda_session_start`, `dda_sample` (sensors, per-axis `challenge01 - skill01` errors, multipliers, \(V_p\) and aggregate `virtual_challenge_total`), degradation/recovery episodes, player death, H5/H6 survey, `dda_session_end`.
+Events are sent to PostHog via `/batch/`; schema version is `telemetry_schema_version` (v2–v5; current payloads use **v5**, which adds four-axis virtual power/challenge fields for H3 — see [`ToolsAndDebug.md`](ToolsAndDebug.md#english)). Main event names: `dda_session_start`, `dda_sample` (sensors, per-axis `challenge01 - skill01` errors, multipliers, \(V_p\) and `virtual_challenge_*` axes), degradation/recovery episodes, player death, H5/H6 survey, `dda_session_end`.
 
-For H1–H2, fields like `axis_*_skill01`, `axis_*_challenge01`, `axis_*_abs_error`, `axis_*_multiplier`, deltas, and `axis_*_is_jump` matter. For H3, reports rely on per-plane errors; `virtual_power_total` / `virtual_challenge_total` are auxiliary — see [`ToolsAndDebug.md`](ToolsAndDebug.md#english). PostHog host/token are injected at build time (`TelemetrySecrets.props`), not via BepInEx. User-facing config retains items such as **Research Telemetry / Telemetry Enabled** and sample/flush intervals.
+For H1–H2, fields like `axis_*_skill01`, `axis_*_challenge01`, `axis_*_abs_error`, per-axis deltas of error/challenge, `axis_*_multiplier`, multiplier deltas, and `axis_*_is_jump` matter (H2 primary = error-trajectory smoothness; multiplier jumps are auxiliary). For H3, reports rely on four-axis `virtual_power_{hp,move_speed,attack_speed,attack_damage}` and matching `virtual_challenge_*` fields; `virtual_power_total` / `virtual_challenge_total` are legacy diagnostics — see [`ToolsAndDebug.md`](ToolsAndDebug.md#english). PostHog host/token are injected at build time (`TelemetrySecrets.props`), not via BepInEx. User-facing config retains items such as **Research Telemetry / Telemetry Enabled** and sample/flush intervals.
 
 ### Post-run survey (H5/H6)
 
@@ -128,9 +128,9 @@ flowchart TD
   postHogClient --> postHogCloud[PostHogCloud]
 ```
 
-События уходят в PostHog через `/batch/`; версия схемы — поле `telemetry_schema_version` (в текстах ниже встречаются v2 и v3). Основные имена: `dda_session_start`, `dda_sample` (сенсоры, ошибки по осям `challenge01 - skill01`, множители, \(V_p\) и агрегат `virtual_challenge_total`), эпизоды деградации/восстановления, смерть игрока, опрос H5/H6, `dda_session_end`.
+События уходят в PostHog через `/batch/`; версия схемы — поле `telemetry_schema_version` (v2–v5; текущие события — **v5**: четыре оси виртуальной мощности/сложности для H3 — см. [`ToolsAndDebug.md`](ToolsAndDebug.md#russian)). Основные имена: `dda_session_start`, `dda_sample` (сенсоры, ошибки по осям `challenge01 - skill01`, множители, \(V_p\) и оси `virtual_challenge_*`), эпизоды деградации/восстановления, смерть игрока, опрос H5/H6, `dda_session_end`.
 
-Для гипотез H1–H2 по осям важны поля вида `axis_*_skill01`, `axis_*_challenge01`, `axis_*_abs_error`, `axis_*_multiplier`, приращения и `axis_*_is_jump`. Для H3 в отчётах опираются на покомпонентные ошибки по четырём плоскостям; агрегаты `virtual_power_total` / `virtual_challenge_total` — вспомогательные, см. [`ToolsAndDebug.md`](ToolsAndDebug.md#russian). Host и токен PostHog задаются при сборке (`TelemetrySecrets.props`), не через BepInEx. В конфиге остаются пользовательские параметры вроде **Research Telemetry / Telemetry Enabled** и интервалы сэмпла/флеша.
+Для гипотез H1–H2 по осям важны `axis_*_skill01`, `axis_*_challenge01`, `axis_*_abs_error`, приращения ошибки/вызова, `axis_*_multiplier`, приращения множителя и `axis_*_is_jump` (основная H2 — плавность траектории ошибки; скачки множителя — вспомогательно). Для H3 в отчётах используются четыре оси `virtual_power_{hp,move_speed,attack_speed,attack_damage}` и соответствующие `virtual_challenge_*`; агрегаты `virtual_power_total` / `virtual_challenge_total` — legacy-диагностика, см. [`ToolsAndDebug.md`](ToolsAndDebug.md#russian). Host и токен PostHog задаются при сборке (`TelemetrySecrets.props`), не через BepInEx. В конфиге остаются пользовательские параметры вроде **Research Telemetry / Telemetry Enabled** и интервалы сэмпла/флеша.
 
 ### Post-run survey (H5/H6)
 

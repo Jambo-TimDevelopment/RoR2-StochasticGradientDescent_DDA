@@ -109,21 +109,24 @@ For **MVP adaptation with 4 `GeneStat` actuators** (HP/MoveSpeed/AttackSpeed/Att
    - `CombatUptime` — fraction of time in combat (not outOfCombat)
 
 4) **Build virtual power \(V_p(t)\)** (for \(\alpha (V_c - V_p)^2\) term)
-   - `V_p.offense`, `V_p.defense`, `V_p.mobility`, `V_p.total` (formula below)
+   - `V_p.hp`, `V_p.moveSpeed`, `V_p.attackSpeed`, `V_p.attackDamage`, `V_p.total` (formula below)
 
 #### \(V_p(t)\) formula (implemented in `SgdEngine/`)
 
-Absolute proxy + log compression + EMA smoothing:
+Four-axis proxy aligned with the SGD actuators + item-aware bonus + log compression + EMA smoothing:
 
-- `OffenseRaw = damage * attackSpeed * (1 + critChance)`
-- `DefenseRaw = EHP + RegenWeight * regen`, where `EHP ≈ (maxHealth + maxShield) * clamp((100 + armor)/100, 0.05, 10)`
-- `MobilityRaw = moveSpeed`
+- `HpRaw = EHP + RegenWeight * regen`, where `EHP ≈ (maxHealth + maxShield) * clamp((100 + armor)/100, 0.05, 10)`
+- `MoveSpeedRaw = moveSpeed`
+- `AttackSpeedRaw = attackSpeed`
+- `AttackDamageRaw = damage * (1 + critChance)`
+- `ItemBonus_i` from `Inventory` / `ItemDef.tags` / known high-impact items for proc, on-hit, healing, utility, and mobility power not fully visible in scalar body stats.
 
 Compression:
-- `Offense = log(1 + OffenseRaw)`
-- `Defense = log(1 + DefenseRaw)`
-- `Mobility = log(1 + MobilityRaw)`
-- `Total = 0.50*Offense + 0.35*Defense + 0.15*Mobility`
+- `Hp = log(1 + HpRaw) + ItemBonus_hp`
+- `MoveSpeed = log(1 + MoveSpeedRaw) + ItemBonus_moveSpeed`
+- `AttackSpeed = log(1 + AttackSpeedRaw) + ItemBonus_attackSpeed`
+- `AttackDamage = log(1 + AttackDamageRaw) + ItemBonus_attackDamage`
+- `Total = mean(Hp, MoveSpeed, AttackSpeed, AttackDamage)`
 
 EMA smoothing:
 - `xEma = lerp(xEma, x, 1 - exp(-dt/τ))`, default \(\tau\) ~7.5 s.
@@ -379,20 +382,23 @@ C = (V_c + S_c) - (V_p + S_p)
    - `CombatUptime` — доля времени «в бою» (не outOfCombat)
 
 4) **Виртуальная сила билда \(V_p(t)\)** (для члена \(\alpha (V_c - V_p)^2\))
-   - `V_p.offense`, `V_p.defense`, `V_p.mobility`, `V_p.total` (см. формулу ниже)
+   - `V_p.hp`, `V_p.moveSpeed`, `V_p.attackSpeed`, `V_p.attackDamage`, `V_p.total` (см. формулу ниже)
 
 #### Формула \(V_p(t)\) (реализовано в `SgdEngine/`)
-Используется абсолютная прокси‑оценка + лог‑сжатие диапазона + EMA‑сглаживание:
+Используется четырёхосевая прокси‑оценка, согласованная с актуаторами SGD, item-aware бонус, лог‑сжатие диапазона и EMA‑сглаживание:
 
-- `OffenseRaw = damage * attackSpeed * (1 + critChance)`
-- `DefenseRaw = EHP + RegenWeight * regen`, где `EHP ≈ (maxHealth + maxShield) * clamp((100 + armor)/100, 0.05, 10)`
-- `MobilityRaw = moveSpeed`
+- `HpRaw = EHP + RegenWeight * regen`, где `EHP ≈ (maxHealth + maxShield) * clamp((100 + armor)/100, 0.05, 10)`
+- `MoveSpeedRaw = moveSpeed`
+- `AttackSpeedRaw = attackSpeed`
+- `AttackDamageRaw = damage * (1 + critChance)`
+- `ItemBonus_i` из `Inventory` / `ItemDef.tags` / списка известных сильных предметов для проков, on-hit, лечения, utility и mobility, которые не всегда полностью видны в скалярных статах тела.
 
 Далее (компрессия):
-- `Offense = log(1 + OffenseRaw)`
-- `Defense = log(1 + DefenseRaw)`
-- `Mobility = log(1 + MobilityRaw)`
-- `Total = 0.50*Offense + 0.35*Defense + 0.15*Mobility`
+- `Hp = log(1 + HpRaw) + ItemBonus_hp`
+- `MoveSpeed = log(1 + MoveSpeedRaw) + ItemBonus_moveSpeed`
+- `AttackSpeed = log(1 + AttackSpeedRaw) + ItemBonus_attackSpeed`
+- `AttackDamage = log(1 + AttackDamageRaw) + ItemBonus_attackDamage`
+- `Total = mean(Hp, MoveSpeed, AttackSpeed, AttackDamage)`
 
 Сглаживание (EMA):
 - `xEma = lerp(xEma, x, 1 - exp(-dt/τ))`, где \(\tau\) по умолчанию ~7.5 сек.

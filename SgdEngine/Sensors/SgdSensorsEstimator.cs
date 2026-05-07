@@ -186,8 +186,9 @@ namespace GeneticsArtifact.SgdEngine
 
             // Recover baseline raw proxies from log-compressed V_p components:
             // vp.Component = log(1 + ComponentRaw)  => ComponentRaw = exp(vp.Component) - 1
-            float offenseBaselineRaw = Mathf.Max(1f, SafeExpm1(vp.Offense));
-            float defenseBaselineRaw = Mathf.Max(1f, SafeExpm1(vp.Defense));
+            float offenseBaselineRaw = Mathf.Max(1f, SafeExpm1(vp.AttackDamage)) *
+                                       Mathf.Max(1f, SafeExpm1(vp.AttackSpeed));
+            float defenseBaselineRaw = Mathf.Max(1f, SafeExpm1(vp.Hp));
 
             // Normalize into [0,1) with exponential compression:
             // norm01 = 1 - exp(-x), where x is a non-negative scaled ratio.

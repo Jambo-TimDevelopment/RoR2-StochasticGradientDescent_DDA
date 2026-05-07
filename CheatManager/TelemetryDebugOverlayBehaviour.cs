@@ -154,7 +154,8 @@ namespace GeneticsArtifact.CheatManager
 
             sb.AppendLine();
             sb.AppendLine($"Degradation: is_degraded={GetBool(p, "is_degraded")} signal={GetFloat(p, "degradation_signal"):F3}");
-            sb.AppendLine($"Virtual: Vp_total={GetFloat(p, "virtual_power_total"):F3} Vc_total={GetFloat(p, "virtual_challenge_total"):F3} gap={GetFloat(p, "virtual_gap_abs"):F3}");
+            sb.AppendLine($"Virtual total: Vp={GetFloat(p, "virtual_power_total"):F3} Vc={GetFloat(p, "virtual_challenge_total"):F3} gap={GetFloat(p, "virtual_gap_abs"):F3}");
+            sb.AppendLine($"Virtual axes gap: hp={GetFloat(p, "virtual_gap_hp_abs"):F3} ms={GetFloat(p, "virtual_gap_move_speed_abs"):F3} as={GetFloat(p, "virtual_gap_attack_speed_abs"):F3} dmg={GetFloat(p, "virtual_gap_attack_damage_abs"):F3}");
 
             _textComponent.text = sb.ToString();
         }

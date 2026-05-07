@@ -18,6 +18,12 @@ namespace GeneticsArtifact.SgdEngine.Decision
         internal const float DefaultGradientClip = 0.50f;
         internal const float DefaultVelocityClip = 1.00f;
         internal const float DefaultErrorDeadZone = 0.03f;
+        internal const float VirtualPowerLossWeight = 0.12f;
+        internal const float VirtualPowerScale = 0.20f;
+        internal const float HpVirtualChallengeWeight = 0.35f;
+        internal const float MsVirtualChallengeWeight = 0.15f;
+        internal const float AsVirtualChallengeWeight = 0.20f;
+        internal const float DmgVirtualChallengeWeight = 0.30f;
         private const float ExternalSyncEpsilon = 0.001f;
 
         // Per-axis learning rates and step caps.
@@ -27,13 +33,21 @@ namespace GeneticsArtifact.SgdEngine.Decision
         internal const float MsLearningRate = 0.20f;
         internal const float MsMaxDeltaTheta = 0.050f; // ~5.1% multiplier step max
 
-        internal const float AsLearningRate = 0.25f;
-        internal const float AsMaxDeltaTheta = 0.075f; // ~7.8% multiplier step max
+        internal const float AsLearningRate = 0.20f;
+        internal const float AsMaxDeltaTheta = 0.045f; // ~4.6% multiplier step max
 
         internal const float DmgLearningRate = 0.18f;
         internal const float DmgMaxDeltaTheta = 0.050f; // ~5.1% multiplier step max
 
         private const float AxisApplyEpsilon = 0.0005f;
+
+        private struct VirtualPowerCompensation
+        {
+            public float HpContribution;
+            public float MsContribution;
+            public float AsContribution;
+            public float DmgContribution;
+        }
 
         public static void Tick(CharacterBody playerBody, float dt)
         {
@@ -188,26 +202,119 @@ namespace GeneticsArtifact.SgdEngine.Decision
         private static void StepAllAxes(in SgdSensorsSample sensors)
         {
             bool changed = false;
+            VirtualPowerCompensation virtualCompensation = PrepareAxisVirtualPowerCompensation();
 
             if (SgdDecisionRuntimeState.IsMaxHealthAdaptationEnabled)
             {
-                changed |= StepMaxHealth(sensors);
+                changed |= StepMaxHealth(sensors, virtualCompensation.HpContribution);
             }
             if (SgdDecisionRuntimeState.IsMoveSpeedAdaptationEnabled)
             {
-                changed |= StepMoveSpeed(sensors);
+                changed |= StepMoveSpeed(sensors, virtualCompensation.MsContribution);
             }
             if (SgdDecisionRuntimeState.IsAttackSpeedAdaptationEnabled)
             {
-                changed |= StepAttackSpeed(sensors);
+                changed |= StepAttackSpeed(sensors, virtualCompensation.AsContribution);
             }
             if (SgdDecisionRuntimeState.IsAttackDamageAdaptationEnabled)
             {
-                changed |= StepAttackDamage(sensors);
+                changed |= StepAttackDamage(sensors, virtualCompensation.DmgContribution);
             }
 
             int applied = changed ? SgdActuatorsApplier.ApplyToAllLivingMonsters() : 0;
             SgdDecisionRuntimeState.RecordGlobalStep(appliedMonsters: applied);
+        }
+
+        private static VirtualPowerCompensation PrepareAxisVirtualPowerCompensation()
+        {
+            SgdVirtualPowerSample virtualChallenge = ComputeCurrentVirtualChallengeAxes();
+            SgdVirtualPowerSample virtualPowerDelta = default;
+            SgdVirtualPowerSample virtualError = default;
+            var result = new VirtualPowerCompensation();
+
+            if (SgdRuntimeState.HasVirtualPower)
+            {
+                var currentVirtualPower = SgdRuntimeState.VirtualPower;
+                if (IsFinite(currentVirtualPower))
+                {
+                    if (!SgdDecisionRuntimeState.HasBaselineVirtualPower)
+                    {
+                        SgdDecisionRuntimeState.CaptureBaselineVirtualPower(currentVirtualPower);
+                    }
+
+                    if (SgdDecisionRuntimeState.HasBaselineVirtualPower)
+                    {
+                        virtualPowerDelta = Subtract(currentVirtualPower, SgdDecisionRuntimeState.BaselineVirtualPower);
+                        virtualError = new SgdVirtualPowerSample(
+                            hp: virtualChallenge.Hp - (virtualPowerDelta.Hp * VirtualPowerScale),
+                            moveSpeed: virtualChallenge.MoveSpeed - (virtualPowerDelta.MoveSpeed * VirtualPowerScale),
+                            attackSpeed: virtualChallenge.AttackSpeed - (virtualPowerDelta.AttackSpeed * VirtualPowerScale),
+                            attackDamage: virtualChallenge.AttackDamage - (virtualPowerDelta.AttackDamage * VirtualPowerScale));
+
+                        result.HpContribution = VirtualPowerLossWeight * virtualError.Hp;
+                        result.MsContribution = VirtualPowerLossWeight * virtualError.MoveSpeed;
+                        result.AsContribution = VirtualPowerLossWeight * virtualError.AttackSpeed;
+                        result.DmgContribution = VirtualPowerLossWeight * virtualError.AttackDamage;
+                    }
+                }
+            }
+
+            SgdDecisionRuntimeState.RecordVirtualPowerCompensation(
+                virtualPowerDelta: virtualPowerDelta,
+                virtualChallenge: virtualChallenge,
+                virtualError: virtualError,
+                hpContribution: result.HpContribution,
+                msContribution: result.MsContribution,
+                asContribution: result.AsContribution,
+                dmgContribution: result.DmgContribution);
+
+            return result;
+        }
+
+        internal static SgdVirtualPowerSample ComputeCurrentVirtualChallengeAxes()
+        {
+            return new SgdVirtualPowerSample(
+                hp: SafeTheta(SgdDecisionRuntimeState.MaxHealthTheta),
+                moveSpeed: SafeTheta(SgdDecisionRuntimeState.MoveSpeedTheta),
+                attackSpeed: SafeTheta(SgdDecisionRuntimeState.AttackSpeedTheta),
+                attackDamage: SafeTheta(SgdDecisionRuntimeState.AttackDamageTheta));
+        }
+
+        private static float ComputeCurrentVirtualChallenge()
+        {
+            var axes = ComputeCurrentVirtualChallengeAxes();
+
+            return (HpVirtualChallengeWeight * axes.Hp) +
+                   (MsVirtualChallengeWeight * axes.MoveSpeed) +
+                   (AsVirtualChallengeWeight * axes.AttackSpeed) +
+                   (DmgVirtualChallengeWeight * axes.AttackDamage);
+        }
+
+        private static float SafeTheta(float theta)
+        {
+            return float.IsNaN(theta) || float.IsInfinity(theta) ? 0f : theta;
+        }
+
+        private static bool IsFinite(in SgdVirtualPowerSample sample)
+        {
+            return IsFinite(sample.Hp) &&
+                   IsFinite(sample.MoveSpeed) &&
+                   IsFinite(sample.AttackSpeed) &&
+                   IsFinite(sample.AttackDamage);
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
+        private static SgdVirtualPowerSample Subtract(in SgdVirtualPowerSample a, in SgdVirtualPowerSample b)
+        {
+            return new SgdVirtualPowerSample(
+                hp: a.Hp - b.Hp,
+                moveSpeed: a.MoveSpeed - b.MoveSpeed,
+                attackSpeed: a.AttackSpeed - b.AttackSpeed,
+                attackDamage: a.AttackDamage - b.AttackDamage);
         }
 
         private static float EstimateAttackSpeedSkill01(in SgdSensorsSample s)
@@ -283,7 +390,7 @@ namespace GeneticsArtifact.SgdEngine.Decision
             return Mathf.Clamp01(skill01);
         }
 
-        private static bool StepMaxHealth(in SgdSensorsSample sensors)
+        private static bool StepMaxHealth(in SgdSensorsSample sensors, float virtualErrorContribution)
         {
             SgdAxisLimitProvider.GetMaxHealthLimits(out float floor, out float cap);
             float thetaMin = Mathf.Log(floor);
@@ -296,8 +403,9 @@ namespace GeneticsArtifact.SgdEngine.Decision
             float challenge01 = Mathf.Clamp01((theta - thetaMin) / thetaRange);
             float skill01 = EstimateMaxHealthSkill01(sensors);
 
-            float error = challenge01 - skill01; // >0 => too hard => decrease theta
-            if (Mathf.Abs(error) < DefaultErrorDeadZone) error = 0f;
+            float axisError = challenge01 - skill01; // >0 => too hard => decrease theta
+            if (Mathf.Abs(axisError) < DefaultErrorDeadZone) axisError = 0f;
+            float error = axisError + virtualErrorContribution;
 
             float gradient = 2f * error * (1f / thetaRange);
             gradient = Mathf.Clamp(gradient, -DefaultGradientClip, DefaultGradientClip);
@@ -328,7 +436,7 @@ namespace GeneticsArtifact.SgdEngine.Decision
             return Mathf.Abs(after - before) > AxisApplyEpsilon;
         }
 
-        private static bool StepMoveSpeed(in SgdSensorsSample sensors)
+        private static bool StepMoveSpeed(in SgdSensorsSample sensors, float virtualErrorContribution)
         {
             SgdAxisLimitProvider.GetMoveSpeedLimits(out float floor, out float cap);
             float thetaMin = Mathf.Log(floor);
@@ -341,8 +449,9 @@ namespace GeneticsArtifact.SgdEngine.Decision
             float challenge01 = Mathf.Clamp01((theta - thetaMin) / thetaRange);
             float skill01 = EstimateMoveSpeedSkill01(sensors);
 
-            float error = challenge01 - skill01; // >0 => too hard => decrease theta
-            if (Mathf.Abs(error) < DefaultErrorDeadZone) error = 0f;
+            float axisError = challenge01 - skill01; // >0 => too hard => decrease theta
+            if (Mathf.Abs(axisError) < DefaultErrorDeadZone) axisError = 0f;
+            float error = axisError + virtualErrorContribution;
 
             float gradient = 2f * error * (1f / thetaRange);
             gradient = Mathf.Clamp(gradient, -DefaultGradientClip, DefaultGradientClip);
@@ -373,7 +482,7 @@ namespace GeneticsArtifact.SgdEngine.Decision
             return Mathf.Abs(after - before) > AxisApplyEpsilon;
         }
 
-        private static bool StepAttackSpeed(in SgdSensorsSample sensors)
+        private static bool StepAttackSpeed(in SgdSensorsSample sensors, float virtualErrorContribution)
         {
             SgdAxisLimitProvider.GetAttackSpeedLimits(out float floor, out float cap);
             float thetaMin = Mathf.Log(floor);
@@ -386,8 +495,9 @@ namespace GeneticsArtifact.SgdEngine.Decision
             float challenge01 = Mathf.Clamp01((theta - thetaMin) / thetaRange);
             float skill01 = EstimateAttackSpeedSkill01(sensors);
 
-            float error = challenge01 - skill01; // >0 => too hard => decrease theta
-            if (Mathf.Abs(error) < DefaultErrorDeadZone) error = 0f;
+            float axisError = challenge01 - skill01; // >0 => too hard => decrease theta
+            if (Mathf.Abs(axisError) < DefaultErrorDeadZone) axisError = 0f;
+            float error = axisError + virtualErrorContribution;
 
             float gradient = 2f * error * (1f / thetaRange);
             gradient = Mathf.Clamp(gradient, -DefaultGradientClip, DefaultGradientClip);
@@ -418,7 +528,7 @@ namespace GeneticsArtifact.SgdEngine.Decision
             return Mathf.Abs(after - before) > AxisApplyEpsilon;
         }
 
-        private static bool StepAttackDamage(in SgdSensorsSample sensors)
+        private static bool StepAttackDamage(in SgdSensorsSample sensors, float virtualErrorContribution)
         {
             SgdAxisLimitProvider.GetAttackDamageLimits(out float floor, out float cap);
             float thetaMin = Mathf.Log(floor);
@@ -431,8 +541,9 @@ namespace GeneticsArtifact.SgdEngine.Decision
             float challenge01 = Mathf.Clamp01((theta - thetaMin) / thetaRange);
             float skill01 = EstimateAttackDamageSkill01(sensors);
 
-            float error = challenge01 - skill01; // >0 => too hard => decrease theta
-            if (Mathf.Abs(error) < DefaultErrorDeadZone) error = 0f;
+            float axisError = challenge01 - skill01; // >0 => too hard => decrease theta
+            if (Mathf.Abs(axisError) < DefaultErrorDeadZone) axisError = 0f;
+            float error = axisError + virtualErrorContribution;
 
             float gradient = 2f * error * (1f / thetaRange);
             gradient = Mathf.Clamp(gradient, -DefaultGradientClip, DefaultGradientClip);

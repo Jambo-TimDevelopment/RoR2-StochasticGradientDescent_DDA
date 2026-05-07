@@ -5,14 +5,21 @@ namespace GeneticsArtifact.SgdEngine
 {
     /// <summary>
     /// Stable, low-noise estimate of player's virtual power V_p(t).
-    /// Uses absolute raw proxies + log compression + EMA smoothing.
+    /// Uses the same four axes as SGD difficulty actuators: HP, move speed,
+    /// attack speed, and attack damage. Item tags add proc/synergy power that
+    /// is not always visible in CharacterBody scalar stats.
     /// </summary>
     public sealed class SgdVirtualPowerEstimator
     {
-        // Total aggregation weights.
-        public const float WeightOffense = 0.50f;
-        public const float WeightDefense = 0.35f;
-        public const float WeightMobility = 0.15f;
+        public const float WeightHp = 0.25f;
+        public const float WeightMoveSpeed = 0.25f;
+        public const float WeightAttackSpeed = 0.25f;
+        public const float WeightAttackDamage = 0.25f;
+
+        // Legacy telemetry aliases kept for one schema transition.
+        public const float WeightOffense = WeightAttackDamage;
+        public const float WeightDefense = WeightHp;
+        public const float WeightMobility = WeightMoveSpeed;
 
         // Make regen comparable to EHP (still compressed by log1p).
         public const float RegenWeight = 25f;
@@ -42,15 +49,7 @@ namespace GeneticsArtifact.SgdEngine
                 return default;
             }
 
-            // Offense proxy: DPS-like term. Crit is approximated as expected x2:
-            // E[mult] ≈ 1 + p, where p=critChance.
-            float damage = Mathf.Max(0f, body.damage);
-            float attackSpeed = Mathf.Max(0f, body.attackSpeed);
-            float critChance = Mathf.Clamp(body.crit, 0f, 100f) / 100f;
-            float offenseRaw = damage * attackSpeed * (1f + critChance);
-
-            // Defense proxy: effective health + weighted regen.
-            // Use combined max HP+shield; barrier is ignored (too volatile).
+            // HP axis: effective health + weighted regeneration.
             float hp = Mathf.Max(0f, body.maxHealth);
             float shield = Mathf.Max(0f, body.maxShield);
             float combined = hp + shield;
@@ -62,25 +61,32 @@ namespace GeneticsArtifact.SgdEngine
             float ehp = combined * armorFactor;
 
             float regen = Mathf.Max(0f, body.regen);
-            float defenseRaw = ehp + (RegenWeight * regen);
+            float hpRaw = ehp + (RegenWeight * regen);
 
-            // Mobility proxy: move speed.
-            float mobilityRaw = Mathf.Max(0f, body.moveSpeed);
+            float moveSpeedRaw = Mathf.Max(0f, body.moveSpeed);
+            float attackSpeedRaw = Mathf.Max(0f, body.attackSpeed);
 
-            return new SgdVirtualPowerSample(offenseRaw, defenseRaw, mobilityRaw, total: 0f);
+            // AttackDamage axis: expected hit damage. Crit is approximated as expected x2:
+            // E[mult] ~= 1 + p, where p=critChance.
+            float damage = Mathf.Max(0f, body.damage);
+            float critChance = Mathf.Clamp(body.crit, 0f, 100f) / 100f;
+            float attackDamageRaw = damage * (1f + critChance);
+
+            return new SgdVirtualPowerSample(hpRaw, moveSpeedRaw, attackSpeedRaw, attackDamageRaw);
         }
 
         public SgdVirtualPowerSample ComputeSmoothed(CharacterBody body, float dt)
         {
             var raw = ComputeRaw(body);
 
-            // Log compression.
-            float o = SafeLog1p(raw.Offense);
-            float d = SafeLog1p(raw.Defense);
-            float m = SafeLog1p(raw.Mobility);
-            float total = (WeightOffense * o) + (WeightDefense * d) + (WeightMobility * m);
+            // Log compression + item-aware additive bonus in the same compressed space.
+            var itemBonus = SgdBuildPowerItemModel.EstimateInventoryBonus(body?.inventory);
+            float hp = SafeLog1p(raw.Hp) + itemBonus.Hp;
+            float moveSpeed = SafeLog1p(raw.MoveSpeed) + itemBonus.MoveSpeed;
+            float attackSpeed = SafeLog1p(raw.AttackSpeed) + itemBonus.AttackSpeed;
+            float attackDamage = SafeLog1p(raw.AttackDamage) + itemBonus.AttackDamage;
 
-            var sample = new SgdVirtualPowerSample(o, d, m, total);
+            var sample = new SgdVirtualPowerSample(hp, moveSpeed, attackSpeed, attackDamage);
 
             float alpha = ComputeEmaAlpha(dt, _tauSeconds);
             if (!_hasEma)
@@ -91,10 +97,10 @@ namespace GeneticsArtifact.SgdEngine
             }
 
             _ema = new SgdVirtualPowerSample(
-                offense: Mathf.Lerp(_ema.Offense, sample.Offense, alpha),
-                defense: Mathf.Lerp(_ema.Defense, sample.Defense, alpha),
-                mobility: Mathf.Lerp(_ema.Mobility, sample.Mobility, alpha),
-                total: Mathf.Lerp(_ema.Total, sample.Total, alpha)
+                hp: Mathf.Lerp(_ema.Hp, sample.Hp, alpha),
+                moveSpeed: Mathf.Lerp(_ema.MoveSpeed, sample.MoveSpeed, alpha),
+                attackSpeed: Mathf.Lerp(_ema.AttackSpeed, sample.AttackSpeed, alpha),
+                attackDamage: Mathf.Lerp(_ema.AttackDamage, sample.AttackDamage, alpha)
             );
 
             return _ema;

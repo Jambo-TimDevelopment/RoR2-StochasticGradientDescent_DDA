@@ -8,15 +8,21 @@ namespace GeneticsArtifact.SgdEngine
     /// </summary>
     internal static class SgdAxisLimitProvider
     {
-        private const float FallbackFloor = 0.01f;
-        private const float FallbackCap = 10f;
+        private const float FallbackHpFloor = 0.50f;
+        private const float FallbackHpCap = 2.00f;
+        private const float FallbackMoveSpeedFloor = 0.80f;
+        private const float FallbackMoveSpeedCap = 1.25f;
+        private const float FallbackAttackSpeedFloor = 0.60f;
+        private const float FallbackAttackSpeedCap = 1.6667f;
+        private const float FallbackAttackDamageFloor = 0.60f;
+        private const float FallbackAttackDamageCap = 1.6667f;
         private const float AbsoluteMinFloor = 0.0001f;
 
         public static void GetMaxHealthLimits(out float floor, out float cap)
         {
             NormalizeLimits(
-                ConfigManager.sgdHpFloor?.Value ?? FallbackFloor,
-                ConfigManager.sgdHpCap?.Value ?? FallbackCap,
+                ConfigManager.sgdHpFloor?.Value ?? FallbackHpFloor,
+                ConfigManager.sgdHpCap?.Value ?? FallbackHpCap,
                 out floor,
                 out cap);
         }
@@ -24,8 +30,8 @@ namespace GeneticsArtifact.SgdEngine
         public static void GetMoveSpeedLimits(out float floor, out float cap)
         {
             NormalizeLimits(
-                ConfigManager.sgdMsFloor?.Value ?? FallbackFloor,
-                ConfigManager.sgdMsCap?.Value ?? FallbackCap,
+                ConfigManager.sgdMsFloor?.Value ?? FallbackMoveSpeedFloor,
+                ConfigManager.sgdMsCap?.Value ?? FallbackMoveSpeedCap,
                 out floor,
                 out cap);
         }
@@ -33,8 +39,8 @@ namespace GeneticsArtifact.SgdEngine
         public static void GetAttackSpeedLimits(out float floor, out float cap)
         {
             NormalizeLimits(
-                ConfigManager.sgdAsFloor?.Value ?? FallbackFloor,
-                ConfigManager.sgdAsCap?.Value ?? FallbackCap,
+                ConfigManager.sgdAsFloor?.Value ?? FallbackAttackSpeedFloor,
+                ConfigManager.sgdAsCap?.Value ?? FallbackAttackSpeedCap,
                 out floor,
                 out cap);
         }
@@ -42,8 +48,8 @@ namespace GeneticsArtifact.SgdEngine
         public static void GetAttackDamageLimits(out float floor, out float cap)
         {
             NormalizeLimits(
-                ConfigManager.sgdDmgFloor?.Value ?? FallbackFloor,
-                ConfigManager.sgdDmgCap?.Value ?? FallbackCap,
+                ConfigManager.sgdDmgFloor?.Value ?? FallbackAttackDamageFloor,
+                ConfigManager.sgdDmgCap?.Value ?? FallbackAttackDamageCap,
                 out floor,
                 out cap);
         }
@@ -65,7 +71,7 @@ namespace GeneticsArtifact.SgdEngine
                     GetAttackDamageLimits(out floor, out cap);
                     return;
                 default:
-                    NormalizeLimits(FallbackFloor, FallbackCap, out floor, out cap);
+                    NormalizeLimits(FallbackHpFloor, FallbackHpCap, out floor, out cap);
                     return;
             }
         }

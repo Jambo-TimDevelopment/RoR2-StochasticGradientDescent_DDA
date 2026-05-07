@@ -1,3 +1,4 @@
+using GeneticsArtifact.SgdEngine;
 using UnityEngine;
 
 namespace GeneticsArtifact.SgdEngine.Decision
@@ -20,6 +21,21 @@ namespace GeneticsArtifact.SgdEngine.Decision
 
         public static int TotalStepsDone { get; private set; }
         public static int AppliedMonstersLast { get; private set; }
+
+        // --- Virtual power compensation diagnostics ---
+        public static bool HasBaselineVirtualPower { get; private set; }
+        public static SgdVirtualPowerSample BaselineVirtualPower { get; private set; }
+        public static SgdVirtualPowerSample LastVirtualPowerDelta { get; private set; }
+        public static SgdVirtualPowerSample LastVirtualChallenge { get; private set; }
+        public static SgdVirtualPowerSample LastVirtualError { get; private set; }
+        public static float BaselineVirtualPowerTotal => BaselineVirtualPower.Total;
+        public static float LastVirtualPowerDeltaTotal => LastVirtualPowerDelta.Total;
+        public static float LastVirtualChallengeTotal => LastVirtualChallenge.Total;
+        public static float LastVirtualErrorTotal => LastVirtualError.Total;
+        public static float LastVirtualPowerContributionHp { get; private set; }
+        public static float LastVirtualPowerContributionMs { get; private set; }
+        public static float LastVirtualPowerContributionAs { get; private set; }
+        public static float LastVirtualPowerContributionDmg { get; private set; }
 
         // --- Axis: MaxHealth (HP) ---
         public static bool IsMaxHealthAdaptationEnabled { get; private set; } = true;
@@ -96,6 +112,16 @@ namespace GeneticsArtifact.SgdEngine.Decision
             CombatSecondsSinceLastStep = 0f;
             TotalStepsDone = 0;
             AppliedMonstersLast = 0;
+
+            HasBaselineVirtualPower = false;
+            BaselineVirtualPower = default;
+            LastVirtualPowerDelta = default;
+            LastVirtualChallenge = default;
+            LastVirtualError = default;
+            LastVirtualPowerContributionHp = 0f;
+            LastVirtualPowerContributionMs = 0f;
+            LastVirtualPowerContributionAs = 0f;
+            LastVirtualPowerContributionDmg = 0f;
 
             IsMaxHealthAdaptationEnabled = true;
             HasMaxHealthState = false;
@@ -194,6 +220,48 @@ namespace GeneticsArtifact.SgdEngine.Decision
         {
             TotalStepsDone++;
             AppliedMonstersLast = Mathf.Max(0, appliedMonsters);
+        }
+
+        internal static void CaptureBaselineVirtualPower(in SgdVirtualPowerSample virtualPower)
+        {
+            if (!IsFinite(virtualPower))
+            {
+                return;
+            }
+
+            HasBaselineVirtualPower = true;
+            BaselineVirtualPower = virtualPower;
+        }
+
+        internal static void RecordVirtualPowerCompensation(
+            in SgdVirtualPowerSample virtualPowerDelta,
+            in SgdVirtualPowerSample virtualChallenge,
+            in SgdVirtualPowerSample virtualError,
+            float hpContribution,
+            float msContribution,
+            float asContribution,
+            float dmgContribution)
+        {
+            LastVirtualPowerDelta = virtualPowerDelta;
+            LastVirtualChallenge = virtualChallenge;
+            LastVirtualError = virtualError;
+            LastVirtualPowerContributionHp = hpContribution;
+            LastVirtualPowerContributionMs = msContribution;
+            LastVirtualPowerContributionAs = asContribution;
+            LastVirtualPowerContributionDmg = dmgContribution;
+        }
+
+        private static bool IsFinite(in SgdVirtualPowerSample sample)
+        {
+            return IsFinite(sample.Hp) &&
+                   IsFinite(sample.MoveSpeed) &&
+                   IsFinite(sample.AttackSpeed) &&
+                   IsFinite(sample.AttackDamage);
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
         }
 
         internal static void AddCombatSeconds(float dt)

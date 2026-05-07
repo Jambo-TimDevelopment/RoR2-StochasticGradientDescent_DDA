@@ -1,3 +1,21 @@
+"""
+validate_posthog_survey.py
+
+Проверяет корректность наличия и валидности "опроса после сессии" (H5/H6 survey)
+в JSONL-экспортах PostHog, группируя события по `session_id`.
+
+Логика:
+- Для каждой сессии, где есть `dda_session_end` (или event_kind == `session_end`),
+  должен быть хотя бы один из: `dda_post_session_survey` / `post_session_survey`
+  или `dda_post_session_survey_skipped` / `post_session_survey_skipped`.
+- Если survey присутствует, то `fairness_likert_1_7` и `continuity_likert_1_7`
+  должны быть целыми в диапазоне 1..7.
+- Из `survey_comment` дополнительно извлекается `ui_trigger=...` (если закодировано в строке).
+
+Выводит диагностические сессии; завершает работу с exit code 1, если найдено
+пропущенный/некорректный survey (missing_survey или invalid_survey), иначе 0.
+"""
+
 import argparse
 import glob
 import json
