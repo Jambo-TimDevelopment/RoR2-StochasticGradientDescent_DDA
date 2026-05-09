@@ -87,7 +87,7 @@ def main() -> int:
     ap.add_argument("inputs", nargs="+", help="JSONL files or globs.")
     ap.add_argument(
         "--out",
-        default=os.path.join("tools", "posthog_exports", "hypotheses_results", "sensor_calibration_hints.md"),
+        default=os.path.join("tools", "export_data_scripts", "posthog_exports", "hypotheses_results", "sensor_calibration_hints.md"),
         help="Output markdown report.",
     )
     args = ap.parse_args()

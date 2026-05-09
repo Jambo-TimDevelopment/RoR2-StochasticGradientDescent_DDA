@@ -31,7 +31,7 @@ Per [`RULE.md`](../../RULE.md#english), avoid editing `GeneEngineDriver`, `Maste
 
 ### Deploy and usage
 
-Build produces `GeneticsArtifact.dll` (e.g. `bin/Debug/netstandard2.1/` or Release). Install into BepInEx `BepInEx/plugins` or use `tools/InstallToRor2.ps1` from [`RULE.md`](../../RULE.md#english). Environment variables: `ROR2_PLUGINS_PATH`, `ROR2_GAME_PATH` / `ROR2_DIR` / `ROR2_PATH`.
+Build produces `GeneticsArtifact.dll` (e.g. `bin/Debug/netstandard2.1/` or Release). Install into BepInEx `BepInEx/plugins` or use `tools/export_data_scripts/InstallToRor2.ps1` from [`RULE.md`](../../RULE.md#english). Environment variables: `ROR2_PLUGINS_PATH`, `ROR2_GAME_PATH` / `ROR2_DIR` / `ROR2_PATH`.
 
 After install: launch with the mod, enable Genetics as usual, switch DDA to SGD via UI/menu or CheatManager console. For diagnostics, `DdaAlgorithmState.IsDebugOverlayEnabled` (sensors, multipliers, per-axis skill/challenge; see [`Axes.md`](Axes.md#english)).
 
@@ -81,7 +81,7 @@ Consider exposing DDA mode in UI (e.g. Risk of Options) and extending config wit
 - Установите мод в игру:
   - поместите `GeneticsArtifact.dll` в папку плагинов BepInEx:
     - `BepInEx/plugins` внутри директории RoR2;
-  - или воспользуйтесь скриптом `tools/InstallToRor2.ps1`, описанным в [`RULE.md`](../../RULE.md#russian).
+  - или воспользуйтесь скриптом `tools/export_data_scripts/InstallToRor2.ps1`, описанным в [`RULE.md`](../../RULE.md#russian).
 - Переменные окружения для автопоиска пути игры/плагинов также описаны в `RULE.md`:
   - `ROR2_PLUGINS_PATH`
   - `ROR2_GAME_PATH` / `ROR2_DIR` / `ROR2_PATH`

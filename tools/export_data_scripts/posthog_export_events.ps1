@@ -78,7 +78,7 @@ function Try-LoadSecrets([string]$path) {
 }
 
 if ([string]::IsNullOrWhiteSpace($SecretsPropsPath)) {
-  $repoRoot = Split-Path -Parent $PSScriptRoot
+  $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
   $SecretsPropsPath = Join-Path $repoRoot "TelemetrySecrets.props"
 }
 

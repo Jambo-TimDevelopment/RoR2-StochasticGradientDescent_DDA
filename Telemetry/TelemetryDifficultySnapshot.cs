@@ -8,14 +8,25 @@ namespace GeneticsArtifact.Telemetry
     internal readonly struct TelemetryDifficultySnapshot
     {
         public readonly string Mode;
+        public readonly string ChallengeSource;
+        public readonly string ChallengeSemantics;
         public readonly float MaxHealth;
         public readonly float MoveSpeed;
         public readonly float AttackSpeed;
         public readonly float AttackDamage;
 
-        public TelemetryDifficultySnapshot(string mode, float maxHealth, float moveSpeed, float attackSpeed, float attackDamage)
+        public TelemetryDifficultySnapshot(
+            string mode,
+            string challengeSource,
+            string challengeSemantics,
+            float maxHealth,
+            float moveSpeed,
+            float attackSpeed,
+            float attackDamage)
         {
             Mode = mode;
+            ChallengeSource = challengeSource ?? "";
+            ChallengeSemantics = challengeSemantics ?? "";
             MaxHealth = Sanitize(maxHealth);
             MoveSpeed = Sanitize(moveSpeed);
             AttackSpeed = Sanitize(attackSpeed);
@@ -29,6 +40,8 @@ namespace GeneticsArtifact.Telemetry
             {
                 return new TelemetryDifficultySnapshot(
                     mode,
+                    "sgd_actuators",
+                    "ln_clamped_multiplier",
                     SgdActuatorsRuntimeState.MaxHealthMultiplier,
                     SgdActuatorsRuntimeState.MoveSpeedMultiplier,
                     SgdActuatorsRuntimeState.AttackSpeedMultiplier,
@@ -40,7 +53,14 @@ namespace GeneticsArtifact.Telemetry
                 return CaptureGeneticAverages();
             }
 
-            return new TelemetryDifficultySnapshot(mode, 1f, 1f, 1f, 1f);
+            return new TelemetryDifficultySnapshot(
+                mode,
+                "fls_fixed",
+                "ln_clamped_multiplier_fixed_unity",
+                1f,
+                1f,
+                1f,
+                1f);
         }
 
         public float GetMultiplier(GeneStat stat)
@@ -90,10 +110,27 @@ namespace GeneticsArtifact.Telemetry
 
             if (count <= 0)
             {
-                return new TelemetryDifficultySnapshot("GA", 1f, 1f, 1f, 1f);
+                return new TelemetryDifficultySnapshot(
+                    "GA",
+                    "ga_fallback_unity",
+                    "ln_clamped_multiplier",
+                    1f,
+                    1f,
+                    1f,
+                    1f);
             }
 
-            return new TelemetryDifficultySnapshot("GA", hp / count, ms / count, attackSpeed / count, attackDamage / count);
+            string source = GeneEngineDriver.masterGenes != null && GeneEngineDriver.masterGenes.Count > 0
+                ? "ga_master_genes_avg"
+                : "ga_living_genes_avg";
+            return new TelemetryDifficultySnapshot(
+                "GA",
+                source,
+                "ln_clamped_multiplier",
+                hp / count,
+                ms / count,
+                attackSpeed / count,
+                attackDamage / count);
         }
 
         private static void AddGenes(

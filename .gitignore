@@ -347,3 +347,9 @@ TelemetrySecrets.props
 
 # Local telemetry exports (do not commit)
 tools/posthog_exports/
+tools/posthog_exports_last_hour/
+tools/export_data_scripts/posthog_exports/
+tools/export_data_scripts/posthog_exports_last_hour/
+
+# Generated chart report runs (local only)
+tools/analyze_data_scripts/hypotheses_chart_reports/runs/

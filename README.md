@@ -64,7 +64,7 @@ More in [`RULE.md`](RULE.md#english) and [`Docs/SgdDda/Implementation.md`](Docs/
 
 - Build (`dotnet build`) → `GeneticsArtifact.dll`.
 - Copy to BepInEx `BepInEx/plugins` (game folder or Thunderstore/r2modman profile).
-- Optional: `tools/InstallToRor2.ps1` — uses `ROR2_PLUGINS_PATH` (recommended for profiles) or `ROR2_GAME_PATH` / `ROR2_DIR` / `ROR2_PATH`.
+- Optional: `tools/export_data_scripts/InstallToRor2.ps1` — uses `ROR2_PLUGINS_PATH` (recommended for profiles) or `ROR2_GAME_PATH` / `ROR2_DIR` / `ROR2_PATH`.
 
 Details: [`RULE.md`](RULE.md#english) (deploy section).
 
@@ -154,7 +154,7 @@ C = (V_c + S_c) - (V_p + S_p)
 - Соберите проект (`dotnet build`) для получения `GeneticsArtifact.dll`.
 - Скопируйте `GeneticsArtifact.dll` в папку плагинов BepInEx:
   - `BepInEx/plugins` внутри папки игры или профиля Thunderstore/r2modman.
-- В репозитории есть скрипт `tools/InstallToRor2.ps1`, который может автоматически установить мод:
+- В репозитории есть скрипт `tools/export_data_scripts/InstallToRor2.ps1`, который может автоматически установить мод:
   - при наличии переменной окружения `ROR2_PLUGINS_PATH` (рекомендуется для профилей);
   - или при корректно настроенных переменных `ROR2_GAME_PATH` / `ROR2_DIR` / `ROR2_PATH`.
 

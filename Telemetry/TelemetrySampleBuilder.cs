@@ -53,6 +53,7 @@ namespace GeneticsArtifact.Telemetry
 
             SgdVirtualPowerSample virtualChallengeAxes = H3AxisDecisionState.ComputeVirtualChallengeAxes(snapshot);
             H3AxisDecisionSnapshot decision = H3AxisDecisionState.BuildSnapshot(snapshot.Mode, vp, virtualChallengeAxes);
+            H3AxisQualitySnapshot quality = H3AxisDecisionState.GetQualitySnapshot();
             SgdVirtualPowerSample virtualPowerAxes = decision.VirtualPower;
             SgdVirtualPowerSample deltaVirtualPowerAxes = decision.DeltaVirtualPower;
             SgdVirtualPowerSample deltaVirtualChallengeAxes = decision.DeltaVirtualChallenge;
@@ -119,11 +120,29 @@ namespace GeneticsArtifact.Telemetry
             props["h3_axis_schema"] = "vp_vc_4_axes_decision_v2";
             props["h3_virtual_power_scale"] = "relative_to_session_baseline";
             props["h3_virtual_challenge_scale"] = "ln_clamped_multiplier";
+            props["h3_challenge_source"] = snapshot.ChallengeSource;
+            props["h3_vc_semantics"] = snapshot.ChallengeSemantics;
             props["h3_delta_source"] = decision.DeltaSource;
             props["h3_is_decision_step"] = decision.IsDecisionStep;
             props["h3_decision_step_index"] = decision.StepIndex;
             props["h3_decision_step_reason"] = decision.StepReason;
             props["h3_decision_step_interval_seconds"] = decision.StepIntervalSeconds;
+            props["dda_is_decision_step"] = decision.IsDecisionStep;
+            props["dda_decision_step_index"] = decision.StepIndex;
+            props["dda_decision_step_reason"] = decision.StepReason;
+            props["dda_decision_step_interval_seconds"] = decision.StepIntervalSeconds;
+            props["h3_axis_pair_count_hp"] = quality.PairCountHp;
+            props["h3_axis_pair_count_move_speed"] = quality.PairCountMoveSpeed;
+            props["h3_axis_pair_count_attack_speed"] = quality.PairCountAttackSpeed;
+            props["h3_axis_pair_count_attack_damage"] = quality.PairCountAttackDamage;
+            props["h3_axis_nonzero_dvc_count_hp"] = quality.NonzeroDvcCountHp;
+            props["h3_axis_nonzero_dvc_count_move_speed"] = quality.NonzeroDvcCountMoveSpeed;
+            props["h3_axis_nonzero_dvc_count_attack_speed"] = quality.NonzeroDvcCountAttackSpeed;
+            props["h3_axis_nonzero_dvc_count_attack_damage"] = quality.NonzeroDvcCountAttackDamage;
+            props["h3_axis_has_variance_hp"] = quality.HasVarianceHp;
+            props["h3_axis_has_variance_move_speed"] = quality.HasVarianceMoveSpeed;
+            props["h3_axis_has_variance_attack_speed"] = quality.HasVarianceAttackSpeed;
+            props["h3_axis_has_variance_attack_damage"] = quality.HasVarianceAttackDamage;
             props["h3_axis_mean_abs_error"] = meanAbsError;
             props["h3_legacy_virtual_gap_abs"] = virtualGapAbs;
             props["sgd_vp_has_baseline"] = SgdDecisionRuntimeState.HasBaselineVirtualPower;
@@ -304,7 +323,7 @@ namespace GeneticsArtifact.Telemetry
                 ["session_id"] = session.SessionId,
                 ["participant_id"] = GetParticipantId(),
                 ["mod_version"] = GeneticsArtifactPlugin.ModVer,
-                ["telemetry_schema_version"] = 6,
+                ["telemetry_schema_version"] = 7,
                 ["experiment_id"] = ConfigManager.telemetryExperimentId.Value,
                 ["condition_order"] = ConfigManager.telemetryConditionOrder.Value,
                 ["run_attempt_index"] = ConfigManager.telemetryRunAttemptIndex.Value,

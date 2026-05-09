@@ -6,12 +6,18 @@ Hypothesis mapping (see also module constant `_RU_HYPOTHESES_H1_H3_MD` written i
 - H2: primary thesis check is H2.3 — smoothness of the skill–challenge misalignment trajectory
   (fewer/larger-threshold jumps in e_i = challenge01 - skill01, plus mirrored abs_error jump stats).
   H2.1 (actuator / m_i jumps) and H2.2 (target challenge01 jumps) are auxiliary decompositions.
-- H3: virtual power/challenge coupling (corr ΔV_p, ΔV_c), gap |V_c - V_p|, epsilon band rate;
-  four-plane axis metrics are CSV diagnostics, not the formal H3 statement.
+- H3: axis-first virtual power/challenge compensation on 4 planes
+  (`hp`, `move_speed`, `attack_speed`, `attack_damage`): coupling corr(ΔV_p_i, ΔV_c_i),
+  gap |V_c_i - V_p_i|, epsilon band rate per-axis. Legacy total metrics remain sanity diagnostics.
 - H4: degradation/recovery events and recovery_elapsed_seconds.
 
 All survivors are included by default (`player_body` is recorded per session but not used
 to filter). Use `--only-mode`, time windows, or schema filters when you need subsets.
+
+Schema version is the event property `telemetry_schema_version` (see `TelemetrySampleBuilder`
+in the mod). To restrict exports on the server to `telemetry_schema_version >= N`, use
+`tools/export_data_scripts/posthog_export_all.ps1 -TelemetrySchemaVersion N` (PostHog `gte` filter); this script
+can still apply `--min-schema-version` when mixing JSONL from several exports.
 """
 
 # Injected into Russian summary_h1_h4.md (hypothesis wording H1–H3; H2 split into three smoothness checks).
@@ -69,9 +75,9 @@ _RU_HYPOTHESES_H1_H3_MD = """### H1 — точность согласовани�
 
 Проверяется, успевает ли DDA повышать предъявляемую сложность при росте силы сборки игрока и удерживать виртуальную сложность близко к виртуальной мощности.
 
-**Формальная проверка (как в разделе 2.5):** `corr(ΔV_p, ΔV_c)_SGD > 0`, `E[|V_c - V_p|]_SGD ≤ ε_v`, `E[|V_c - V_p|]_SGD < E[|V_c - V_p|]_GA` (обозначения виртуальной мощности `V_p` и вызова `V_c` — как в отчёте по НИР).
+**Формальная проверка (axis-first, как в разделе 2.5):** `corr(ΔV_p_i, ΔV_c_i)_SGD > 0`, `E[|V_c_i - V_p_i|]_SGD ≤ ε_v`, `E[|V_c_i - V_p_i|]_SGD < E[|V_c_i - V_p_i|]_GA` по 4 осям (`hp`, `move_speed`, `attack_speed`, `attack_damage`), где `i` — ось.
 
-**В этом скрипте:** по сессии считаются `h3_corr_dvp_dvc`, средний `h3_mean_virtual_gap_abs`, доля `h3_within_epsilon_rate`. Осевые агрегаты (`h3_axis_*`) остаются в CSV как вспомогательная связь с реализацией и с H1, но не подменяют формулировку H3 по `V_p`/`V_c`.
+**В этом скрипте:** основными метриками H3 считаются осевые агрегаты `h3_axis_corr_dvp_dvc_mean`, `h3_axis_corr_dvp_dvc_mean_lag1`, `h3_axis_corr_dvp_dvc_mean_nonzero_dvc`, `h3_axis_mean_virtual_gap_abs`, `h3_axis_within_epsilon_rate`. Legacy total-поля (`h3_corr_dvp_dvc`, `h3_mean_virtual_gap_abs`, `h3_within_epsilon_rate`) остаются sanity-check и не подменяют axis-first критерий.
 
 ---
 """
@@ -139,6 +145,10 @@ H3_VIRTUAL_AXES = ("hp", "move_speed", "attack_speed", "attack_damage")
 H3_LAG_STEPS = 1
 H3_NONZERO_DVC_EPS = 1e-6
 H3_RESPONSE_DVP_TAU = 1e-6
+H3_NO_PAIRS = "no_pairs"
+H3_ZERO_VARIANCE = "zero_variance"
+H3_ALL_ZERO_DVC = "all_zero_dvc"
+H3_NO_DECISION_STEPS = "no_decision_steps"
 
 
 def _pearson_corr(xs: list[float], ys: list[float]) -> float | None:
@@ -319,6 +329,9 @@ class SessionMetrics:
     h3_axis_within_epsilon_rate_attack_speed: float | None = None
     h3_axis_within_epsilon_rate_attack_damage: float | None = None
     h3_axis_coverage_rate: float | None = None
+    h3_axis_corr_na_reason: str = ""
+    h3_axis_corr_lag1_na_reason: str = ""
+    h3_axis_corr_nonzero_na_reason: str = ""
     h3_corr_dvp_dvc: float | None = None
     h3_corr_dvp_dvc_lag1: float | None = None
     h3_corr_dvp_dvc_nonzero_dvc: float | None = None
@@ -336,6 +349,16 @@ class SessionMetrics:
     h4_max_time_above_050_seconds: float | None = None
     h4_max_time_above_060_seconds: float | None = None
     h4_max_time_above_070_seconds: float | None = None
+
+
+def _join_h3_na_reasons(reasons: list[str]) -> str:
+    if not reasons:
+        return ""
+    seen: list[str] = []
+    for reason in reasons:
+        if reason and reason not in seen:
+            seen.append(reason)
+    return "|".join(seen)
 
 
 def _detect_axes(props: dict) -> list[str]:
@@ -527,11 +550,11 @@ def main() -> int:
     ap.add_argument(
         "inputs",
         nargs="+",
-        help="JSONL files or globs, e.g. tools/posthog_exports/ALL_events_*.jsonl",
+        help="JSONL files or globs, e.g. tools/export_data_scripts/posthog_exports/ALL_events_*.jsonl",
     )
     ap.add_argument(
         "--out-dir",
-        default=os.path.join("tools", "posthog_exports", "hypotheses_results"),
+        default=os.path.join("tools", "export_data_scripts", "posthog_exports", "hypotheses_results"),
         help="Output directory (will be created).",
     )
     ap.add_argument(
@@ -617,6 +640,7 @@ def main() -> int:
     sess_h3_axis_dvc: dict[tuple[str, str], list[float]] = {}
     sess_h3_axis_gap: dict[tuple[str, str], list[float]] = {}
     sess_h3_axis_within_eps: dict[tuple[str, str], list[int]] = {}
+    sess_h3_decision_steps: dict[str, int] = {}
     sess_dvp: dict[str, list[float]] = {}
     sess_dvc: dict[str, list[float]] = {}
     sess_vgap: dict[str, list[float]] = {}
@@ -792,6 +816,8 @@ def main() -> int:
                 h3_is_step = _as_bool(props.get("h3_is_decision_step"))
                 use_h3_virtual_sample = schema_v is None or schema_v < 6 or h3_is_step is True
                 if use_h3_virtual_sample:
+                    if h3_is_step is True or schema_v is None or schema_v < 6:
+                        sess_h3_decision_steps[session_id] = sess_h3_decision_steps.get(session_id, 0) + 1
                     dvp = _safe_float(props.get("delta_virtual_power"))
                     dvc = _safe_float(props.get("delta_virtual_challenge"))
                     if dvp is not None:
@@ -960,31 +986,50 @@ def main() -> int:
         axis_gaps: list[float] = []
         axis_within_values: list[int] = []
         covered_axes = 0
+        corr_na_reasons: list[str] = []
+        corr_lag1_na_reasons: list[str] = []
+        corr_nonzero_na_reasons: list[str] = []
         for axis in H3_VIRTUAL_AXES:
             axis_key = (session_id, axis)
             axis_dvp = sess_h3_axis_dvp.get(axis_key, [])
             axis_dvc = sess_h3_axis_dvc.get(axis_key, [])
             axis_n = min(len(axis_dvp), len(axis_dvc))
+            axis_nonzero_n = sum(
+                1 for value in axis_dvc[:axis_n] if abs(value) > H3_NONZERO_DVC_EPS
+            )
             if axis_n >= 2:
                 corr = _pearson_corr(axis_dvp[:axis_n], axis_dvc[:axis_n])
                 if corr is not None:
                     axis_corrs[axis] = corr
+                else:
+                    corr_na_reasons.append(H3_ZERO_VARIANCE)
                 corr_lag1 = _pearson_corr_with_lag(
                     axis_dvp[:axis_n], axis_dvc[:axis_n], lag_steps=H3_LAG_STEPS
                 )
                 if corr_lag1 is not None:
                     axis_corrs_lag1[axis] = corr_lag1
+                else:
+                    corr_lag1_na_reasons.append(H3_ZERO_VARIANCE)
                 corr_nonzero_dvc = _pearson_corr_nonzero_dvc(
                     axis_dvp[:axis_n], axis_dvc[:axis_n], eps=H3_NONZERO_DVC_EPS
                 )
                 if corr_nonzero_dvc is not None:
                     axis_corrs_nonzero_dvc[axis] = corr_nonzero_dvc
+                else:
+                    if axis_nonzero_n < 2:
+                        corr_nonzero_na_reasons.append(H3_ALL_ZERO_DVC)
+                    else:
+                        corr_nonzero_na_reasons.append(H3_ZERO_VARIANCE)
                 sign_match = _sign_match_rate(axis_dvp[:axis_n], axis_dvc[:axis_n])
                 if sign_match is not None:
                     axis_sign_match_rates[axis] = sign_match
                 gain = _response_gain(axis_dvp[:axis_n], axis_dvc[:axis_n])
                 if gain is not None:
                     axis_response_gains[axis] = gain
+            else:
+                corr_na_reasons.append(H3_NO_PAIRS)
+                corr_lag1_na_reasons.append(H3_NO_PAIRS)
+                corr_nonzero_na_reasons.append(H3_NO_PAIRS)
             gaps = sess_h3_axis_gap.get(axis_key, [])
             if gaps:
                 covered_axes += 1
@@ -1001,10 +1046,20 @@ def main() -> int:
             m.h3_axis_corr_move_speed = axis_corrs.get("move_speed")
             m.h3_axis_corr_attack_speed = axis_corrs.get("attack_speed")
             m.h3_axis_corr_attack_damage = axis_corrs.get("attack_damage")
+        else:
+            m.h3_axis_corr_na_reason = _join_h3_na_reasons(corr_na_reasons)
         if axis_corrs_lag1:
             m.h3_axis_corr_dvp_dvc_mean_lag1 = statistics.fmean(axis_corrs_lag1.values())
+        else:
+            m.h3_axis_corr_lag1_na_reason = _join_h3_na_reasons(corr_lag1_na_reasons)
         if axis_corrs_nonzero_dvc:
             m.h3_axis_corr_dvp_dvc_mean_nonzero_dvc = statistics.fmean(axis_corrs_nonzero_dvc.values())
+        else:
+            m.h3_axis_corr_nonzero_na_reason = _join_h3_na_reasons(corr_nonzero_na_reasons)
+        if sess_h3_decision_steps.get(session_id, 0) == 0:
+            m.h3_axis_corr_na_reason = _join_h3_na_reasons([m.h3_axis_corr_na_reason, H3_NO_DECISION_STEPS])
+            m.h3_axis_corr_lag1_na_reason = _join_h3_na_reasons([m.h3_axis_corr_lag1_na_reason, H3_NO_DECISION_STEPS])
+            m.h3_axis_corr_nonzero_na_reason = _join_h3_na_reasons([m.h3_axis_corr_nonzero_na_reason, H3_NO_DECISION_STEPS])
         if axis_sign_match_rates:
             m.h3_axis_sign_match_rate_mean = statistics.fmean(axis_sign_match_rates.values())
         if axis_response_gains:
@@ -1167,6 +1222,9 @@ def main() -> int:
                 "h3_axis_within_epsilon_rate_attack_speed",
                 "h3_axis_within_epsilon_rate_attack_damage",
                 "h3_axis_coverage_rate",
+                "h3_axis_corr_na_reason",
+                "h3_axis_corr_lag1_na_reason",
+                "h3_axis_corr_nonzero_na_reason",
                 "h3_corr_dvp_dvc",
                 "h3_corr_dvp_dvc_lag1",
                 "h3_corr_dvp_dvc_nonzero_dvc",
@@ -1234,6 +1292,9 @@ def main() -> int:
                     "" if s.h3_axis_within_epsilon_rate_attack_speed is None else s.h3_axis_within_epsilon_rate_attack_speed,
                     "" if s.h3_axis_within_epsilon_rate_attack_damage is None else s.h3_axis_within_epsilon_rate_attack_damage,
                     "" if s.h3_axis_coverage_rate is None else s.h3_axis_coverage_rate,
+                    s.h3_axis_corr_na_reason,
+                    s.h3_axis_corr_lag1_na_reason,
+                    s.h3_axis_corr_nonzero_na_reason,
                     "" if s.h3_corr_dvp_dvc is None else s.h3_corr_dvp_dvc,
                     "" if s.h3_corr_dvp_dvc_lag1 is None else s.h3_corr_dvp_dvc_lag1,
                     "" if s.h3_corr_dvp_dvc_nonzero_dvc is None else s.h3_corr_dvp_dvc_nonzero_dvc,
@@ -1357,6 +1418,18 @@ def main() -> int:
         mode: sum(1 for row in by_mode.get(mode, []) if row.h4_degradation_events_count > 0)
         for mode in modes
     }
+    h3_na_diag_by_mode = {}
+    for mode in modes:
+        rows = by_mode.get(mode, [])
+        h3_na_diag_by_mode[mode] = {
+            "lag0": sum(1 for row in rows if row.h3_axis_corr_dvp_dvc_mean is None),
+            "lag1": sum(1 for row in rows if row.h3_axis_corr_dvp_dvc_mean_lag1 is None),
+            "nonzero": sum(1 for row in rows if row.h3_axis_corr_dvp_dvc_mean_nonzero_dvc is None),
+            "no_decision": sum(1 for row in rows if H3_NO_DECISION_STEPS in (row.h3_axis_corr_na_reason or "")),
+            "zero_variance": sum(1 for row in rows if H3_ZERO_VARIANCE in (row.h3_axis_corr_na_reason or "")),
+            "no_pairs": sum(1 for row in rows if H3_NO_PAIRS in (row.h3_axis_corr_na_reason or "")),
+            "all_zero_dvc": sum(1 for row in rows if H3_ALL_ZERO_DVC in (row.h3_axis_corr_nonzero_na_reason or "")),
+        }
 
     def _positive_condition_text(mode: str, attr: str) -> str:
         mean = _mean(mode, attr)
@@ -1381,7 +1454,7 @@ def main() -> int:
             "- **H2:** основная проверка — **H2.3** (плавность траектории ошибки `e_i`, меньше скачков `|Δe|>τ_jump` и связанные средние/p95); **H2.1** и **H2.2** — вспомогательные слои (актуаторы `m_i`, целевой `challenge01`), чтобы локализовать источник резкости.\n"
         )
         f.write(
-            "- **H3:** разделяем два уровня проверки: (A) **механизм SGD** — осевые `corr(ΔV_p_i(t), ΔV_c_i(t+1))` (lag1), lag0 и non-zero `ΔV_c_i` как диагностика контура; (B) **межрежимное сравнение** — только по общим метрикам `|V_c_i - V_p_i|` и доле внутри `ε_v`.\n"
+            "- **H3 (axis-first):** основная проверка строится по 4 осям (`hp`, `move_speed`, `attack_speed`, `attack_damage`) и включает три подпроверки: (1) скорость реакции `corr(ΔV_p_i, ΔV_c_i)` (в т.ч. lag1), (2) точность `|V_c_i - V_p_i|`, (3) удержание в норме (доля внутри `ε_v`). Legacy total-поля используются только как sanity-check.\n"
         )
         f.write("- H4, восстановление после деградации: проверяем, быстрее ли SGD возвращает игру в стабильное состояние после провала перформанса. Формальная проверка: после ухудшения перформанса `T_recovery` у SGD ниже, чем у FLS и GA.\n")
         f.write("- H5, воспринимаемая справедливость: проверяем, кажется ли игрокам SGD более честным режимом сложности. Формальная проверка: субъективная оценка справедливости выше у SGD.\n")
@@ -1401,12 +1474,15 @@ def main() -> int:
             f"- H2.2 (вспомогательно, целевой `challenge01`, `|Δchallenge01|>τ_jump`): {_short_verdict('h2_challenge_jump_rate_tau', lower_is_better=True)}.\n"
         )
         f.write(
-            f"- H3 (уровень A, механизм SGD): lag1 `mean corr(ΔV_p_i(t), ΔV_c_i(t+1))_SGD > 0` — {_positive_condition_text('SGD', 'h3_axis_corr_dvp_dvc_mean_lag1')}; "
-            f"диагностика: lag0 — {_positive_condition_text('SGD', 'h3_axis_corr_dvp_dvc_mean')}; "
+            f"- H3.1 (скорость реакции, axis-first): lag1 `mean corr(ΔV_p_i(t), ΔV_c_i(t+1))_SGD > 0` — {_positive_condition_text('SGD', 'h3_axis_corr_dvp_dvc_mean_lag1')}; "
+            f"доп.диагностика: lag0 — {_positive_condition_text('SGD', 'h3_axis_corr_dvp_dvc_mean')}; "
             f"non-zero `ΔV_c_i` — {_positive_condition_text('SGD', 'h3_axis_corr_dvp_dvc_mean_nonzero_dvc')}.\n"
         )
         f.write(
-            f"- H3 (уровень B, сравнение режимов): по среднему осевому `|V_c_i - V_p_i|` — {_short_verdict('h3_axis_mean_virtual_gap_abs', lower_is_better=True)}.\n"
+            f"- H3.2 (точность компенсации, axis-first): по среднему осевому `|V_c_i - V_p_i|` — {_short_verdict('h3_axis_mean_virtual_gap_abs', lower_is_better=True)}.\n"
+        )
+        f.write(
+            f"- H3.3 (удержание в норме, axis-first): по доле осевых сэмплов в пределах `ε_v` — {_short_verdict('h3_axis_within_epsilon_rate', lower_is_better=False)}.\n"
         )
         f.write(
             f"- H4: восстановление только по сессиям с recovery-событиями; по среднему `T_recovery` — {_short_verdict('h4_mean_recovery_seconds', lower_is_better=True)}.\n"
@@ -1480,13 +1556,14 @@ def main() -> int:
             "Нулевая доля бинарных скачков по множителю у FLS/GA при ненулевом среднем `|Δm|` у SGD часто означает: шаги укладываются в `τ_jump`, но по частоте/величине ведут себя иначе; для **основной** H2 ориентир — метрики **H2.3**.\n\n"
         )
 
-        f.write("## H3: компенсация роста мощности сборки\n\n")
-        f.write("Формулировка: при росте осевых компонент `V_p_i` система должна повышать соответствующие компоненты `V_c_i`, сохраняя `V_c_i` близко к `V_p_i`: `corr(ΔV_p_i, ΔV_c_i)_SGD > 0`, `E[|V_c_i - V_p_i|]_SGD <= ε_v` и `E[|V_c_i - V_p_i|]_SGD < E[|V_c_i - V_p_i|]_GA`. Оси schema v5: `hp`, `move_speed`, `attack_speed`, `attack_damage`.\n\n")
+        f.write("## H3: компенсация роста мощности сборки (axis-first)\n\n")
+        f.write("Формулировка: при росте осевых компонент `V_p_i` система должна повышать соответствующие компоненты `V_c_i`, сохраняя `V_c_i` близко к `V_p_i`: `corr(ΔV_p_i, ΔV_c_i)_SGD > 0`, `E[|V_c_i - V_p_i|]_SGD <= ε_v` и `E[|V_c_i - V_p_i|]_SGD < E[|V_c_i - V_p_i|]_GA`. Оси schema v5+: `hp`, `move_speed`, `attack_speed`, `attack_damage`.\n\n")
         f.write(
-            "### Интерпретация H3 (два уровня вывода)\n\n"
-            "- **Уровень A, механизм SGD:** `mean corr(ΔV_p_i(t), ΔV_c_i(t+1))` (lag1). Это проверка, что контур компенсации внутри SGD реагирует в верном направлении с лагом.\n"
-            "- **Уровень B, сравнение режимов:** только общие метрики, доступные у всех (`E[|V_c_i - V_p_i|]`, доля внутри `ε_v`). По ним нельзя утверждать превосходство, если различия неустойчивы.\n"
-            "- **Диагностика lag0/non-zero `ΔV_c_i`:** помогает объяснить поведение контура, но не заменяет межрежимное сравнение.\n\n"
+            "### Интерпретация H3 (три подпроверки axis-first)\n\n"
+            "- **H3.1 Скорость реакции:** `mean corr(ΔV_p_i(t), ΔV_c_i(t+1))` (lag1) как основной индикатор реакции контура; lag0 и non-zero `ΔV_c_i` — доп.диагностика.\n"
+            "- **H3.2 Точность компенсации:** `E[|V_c_i - V_p_i|]` по 4 осям (ниже лучше).\n"
+            "- **H3.3 Удержание в норме:** доля осевых сэмплов внутри `ε_v` (выше лучше).\n"
+            "- **Legacy total-поля:** вторичный sanity-check, не основной критерий гипотезы H3.\n\n"
         )
         _write_metric_line(f, "`mean corr(ΔV_p_i, ΔV_c_i)` по 4 осям (lag0)", "h3_axis_corr_dvp_dvc_mean")
         _write_metric_line(f, "`mean corr(ΔV_p_i(t), ΔV_c_i(t+1))` по 4 осям (lag1)", "h3_axis_corr_dvp_dvc_mean_lag1")
@@ -1495,6 +1572,30 @@ def main() -> int:
         _write_metric_line(f, "Доля осевых сэмплов в пределах `ε_v`", "h3_axis_within_epsilon_rate")
         _write_metric_line(f, "Покрытие H3 axis fields", "h3_axis_coverage_rate")
         _write_contrasts(f, "h3_axis_mean_virtual_gap_abs", lower_is_better=True)
+        f.write(
+            "- Диагностика NA по режимам (corr lag0 / lag1 / nonzero): "
+            + "; ".join(
+                f"{mode}={h3_na_diag_by_mode[mode]['lag0']}/{h3_na_diag_by_mode[mode]['lag1']}/{h3_na_diag_by_mode[mode]['nonzero']}"
+                for mode in modes
+            )
+            + ".\n"
+        )
+        f.write(
+            "- Причины NA (по lag0): "
+            + "; ".join(
+                f"{mode}: no_decision={h3_na_diag_by_mode[mode]['no_decision']}, no_pairs={h3_na_diag_by_mode[mode]['no_pairs']}, zero_variance={h3_na_diag_by_mode[mode]['zero_variance']}"
+                for mode in modes
+            )
+            + ".\n"
+        )
+        f.write(
+            "- Причина NA для nonzero-метрики: "
+            + "; ".join(
+                f"{mode}: all_zero_dvc={h3_na_diag_by_mode[mode]['all_zero_dvc']}"
+                for mode in modes
+            )
+            + ".\n"
+        )
         f.write("\nLegacy diagnostics (старые total-поля):\n\n")
         _write_metric_line(f, "`corr(ΔV_p_total, ΔV_c_total)` (lag0)", "h3_corr_dvp_dvc")
         _write_metric_line(f, "`corr(ΔV_p_total(t), ΔV_c_total(t+1))` (lag1)", "h3_corr_dvp_dvc_lag1")

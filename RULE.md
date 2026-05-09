@@ -257,7 +257,7 @@ Gradient note:
 ## Deploy after build
 
 - Copy built **.dll** to RoR2 `BepInEx/plugins` after a successful build.
-- Post-build step `tools/InstallToRor2.ps1` tries to auto-install `GeneticsArtifact.dll` after `dotnet build`.
+- Post-build step `tools/export_data_scripts/InstallToRor2.ps1` tries to auto-install `GeneticsArtifact.dll` after `dotnet build`.
 
 ### Auto-install behavior
 - If `ROR2_PLUGINS_PATH` is set — copy there (Thunderstore/r2modman profiles).
@@ -554,7 +554,7 @@ F(t) = Σ_i [ w_i · (S_c_i(t) - S_p_i(t))² ] + α · (V_c(t) - V_p(t))²
 ## Деплой после сборки
 
 - После **успешной сборки** мода нужно копировать собранный **.dll** в папку плагинов RoR2 (`BepInEx/plugins`), чтобы сразу запускать игру с обновлённым модом.
-- В проекте настроен пост‑сборочный шаг (`tools/InstallToRor2.ps1`), который **пытается автоматически** установить `GeneticsArtifact.dll` после `dotnet build`.
+- В проекте настроен пост‑сборочный шаг (`tools/export_data_scripts/InstallToRor2.ps1`), который **пытается автоматически** установить `GeneticsArtifact.dll` после `dotnet build`.
 
 ### Как работает авто‑установка
 - Если задана `ROR2_PLUGINS_PATH` — `.dll` копируется туда (удобно для Thunderstore/r2modman профилей).

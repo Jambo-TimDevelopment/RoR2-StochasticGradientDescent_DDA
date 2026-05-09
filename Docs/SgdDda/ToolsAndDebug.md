@@ -47,7 +47,7 @@ Use `GeneticsArtifactPlugin.geneticLogSource` (or the mod’s `ManualLogSource`)
 
 ### PostHog export scripts
 
-`tools/posthog_export_events.ps1` / `.bat`, `tools/posthog_export_all.ps1` / `.bat` export to `tools/posthog_exports/` (gitignored).
+`tools/export_data_scripts/posthog_export_events.ps1` / `.bat`, `tools/export_data_scripts/posthog_export_all.ps1` / `.bat` export to `tools/export_data_scripts/posthog_exports/` (gitignored).
 
 ### H1–H4: verification protocol and metrics
 
@@ -56,6 +56,17 @@ From `telemetry_schema_version = 3`, H1–H4 use session aggregates and four pla
 **v4** adds: (1) applied SGD axis limits on each event — `sgd_{hp,ms,as,dmg}_floor_applied`, `sgd_*_cap_applied`, `sgd_*_theta_min_applied`, `sgd_*_theta_max_applied`, `sgd_*_theta_range_applied`, `sgd_*_neutral_challenge01`; (2) virtual-power compensation diagnostics from the SGD decision step — `sgd_vp_has_baseline`, `sgd_vp_baseline`, `sgd_vp_delta_for_decision`, `sgd_vc_decision_current`, `sgd_virtual_error_for_decision`, `sgd_virtual_power_scale`, `sgd_virtual_loss_weight`, `sgd_{hp,ms,as,dmg}_virtual_error_contribution`, `sgd_*_virtual_challenge_weight`. Analyses that need these fields should filter `telemetry_schema_version >= 4`.
 
 **v5** replaces the formal H3 signal with four-axis build power and virtual challenge fields aligned with the SGD actuators: `virtual_power_{hp,move_speed,attack_speed,attack_damage}`, `virtual_challenge_*`, `delta_virtual_power_*`, `delta_virtual_challenge_*`, `virtual_gap_*_abs`, `virtual_gap_axes_mean_abs`, `is_within_virtual_gap_axes_epsilon`, `h3_axis_schema = vp_vc_4_axes_v1`. Legacy total fields (`virtual_power_total`, `virtual_challenge_total`, `virtual_gap_abs`, `delta_virtual_power`, `delta_virtual_challenge`) remain for compatibility. Analyses for the corrected H3 should filter `telemetry_schema_version >= 5`.
+
+**v6** adds decision-step semantics for H3 axis data: `h3_is_decision_step`, `h3_decision_step_index`, `h3_decision_step_reason`, `h3_decision_step_interval_seconds`. For `telemetry_schema_version >= 6`, H3 coupling should be calculated from decision steps only.
+
+**v7** standardizes `Vc_i` provenance for all modes and adds runtime quality diagnostics for NA causes:
+- `h3_challenge_source` (`sgd_actuators`, `ga_master_genes_avg`, `ga_living_genes_avg`, `ga_fallback_unity`, `fls_fixed`);
+- `h3_vc_semantics` (currently `ln_clamped_multiplier` / `ln_clamped_multiplier_fixed_unity`);
+- mode-neutral decision aliases `dda_is_decision_step`, `dda_decision_step_*`;
+- per-axis quality counters and flags:
+  - `h3_axis_pair_count_{hp,move_speed,attack_speed,attack_damage}`
+  - `h3_axis_nonzero_dvc_count_{hp,move_speed,attack_speed,attack_damage}`
+  - `h3_axis_has_variance_{hp,move_speed,attack_speed,attack_damage}`.
 
 #### Session quality
 
@@ -79,7 +90,7 @@ Compare distributions so \(E[\text{MAE\_align}]_{\text{SGD}} < E[\text{MAE\_alig
 
 Thesis-level **H2** is the **dynamics** of misalignment, not only its level (that is **H1**): fewer / less severe **jumps** in the error between perceived challenge and estimated skill, i.e. the trajectory of `e_i = challenge01_i - skill01_i`.
 
-**Primary checks (H2.3 in `analyze_hypotheses_h1_h4.py`):** session aggregates such as `P(|Δe_i| > τ_jump)`, `P(|Δ abs_error| > τ_jump)` over axes, plus mean/p95 of `|Δe|` and mirrored `abs_error` step stats. Lower jump rates / smaller step magnitudes ⇒ smoother **error trajectory**.
+**Primary checks (H2.3 in `tools/analyze_data_scripts/analyze_hypotheses_h1_h4.py`):** session aggregates such as `P(|Δe_i| > τ_jump)`, `P(|Δ abs_error| > τ_jump)` over axes, plus mean/p95 of `|Δe|` and mirrored `abs_error` step stats. Lower jump rates / smaller step magnitudes ⇒ smoother **error trajectory**.
 
 **Auxiliary splits:** **H2.1** — actuator / `delta_multiplier` jump stats (where roughness enters the knobs); **H2.2** — target `challenge01` jump stats (where roughness enters the setpoint). They **do not replace** the primary H2 wording; they explain *where* roughness comes from if H2.3 vs H2.1/H2.2 disagree.
 
@@ -124,22 +135,22 @@ Exclude sessions missing degradation start/recovery from `T_recovery` comparison
 #### H1–H4 analysis commands
 
 ```bash
-python tools/analyze_hypotheses_h1_h4.py tools/posthog_exports/ALL_events_*.jsonl
-python tools/analyze_hypotheses_h1_h4.py tools/posthog_exports/ALL_events_*.jsonl --min-schema-version 3
+python tools/analyze_data_scripts/analyze_hypotheses_h1_h4.py tools/export_data_scripts/posthog_exports/ALL_events_*.jsonl
+python tools/analyze_data_scripts/analyze_hypotheses_h1_h4.py tools/export_data_scripts/posthog_exports/ALL_events_*.jsonl --min-schema-version 3
 ```
 
 Session-level tools include **all survivors** in the export (`player_body` is not filtered). For subsets, use `--only-mode`, time filters, or split exports manually.
 
 ```bash
-python tools/inspect_dda_sessions.py tools/posthog_exports/ALL_events_*.jsonl
+python tools/analyze_data_scripts/inspect_dda_sessions.py tools/export_data_scripts/posthog_exports/ALL_events_*.jsonl
 ```
 
-Outputs: `tools/posthog_exports/hypotheses_results/session_metrics_h1_h4.csv`, `summary_h1_h4.md`.
+Outputs: `tools/export_data_scripts/posthog_exports/hypotheses_results/session_metrics_h1_h4.csv`, `summary_h1_h4.md`.
 
 Sensor calibration:
 
 ```bash
-python tools/calibrate_sgd_sensors.py tools/posthog_exports/ALL_events_*.jsonl
+python tools/analyze_data_scripts/calibrate_sgd_sensors.py tools/export_data_scripts/posthog_exports/ALL_events_*.jsonl
 ```
 
 Produces `sensor_calibration_hints.md` — candidate thresholds only; finalize manually in experiment config.
@@ -151,8 +162,8 @@ Subjective Likert 1–7: **H5 fairness** (1 unfair … 7 fair); **H6 continuity*
 Validator:
 
 ```bash
-python tools/validate_posthog_survey.py tools/posthog_exports/ALL_events_*.jsonl
-python tools/validate_posthog_survey.py tools/posthog_exports/ALL_events_*.jsonl --show-ok
+python tools/analyze_data_scripts/validate_posthog_survey.py tools/export_data_scripts/posthog_exports/ALL_events_*.jsonl
+python tools/analyze_data_scripts/validate_posthog_survey.py tools/export_data_scripts/posthog_exports/ALL_events_*.jsonl --show-ok
 ```
 
 ---
@@ -283,12 +294,12 @@ Overlay удобно реализовать как простой текстов
 
 ### PostHog экспорт данных (инструментарий исследования)
 
-В `tools/` добавлены скрипты для выгрузки событий/персон из PostHog в `tools/posthog_exports/`:
+В `tools/` добавлены скрипты для выгрузки событий/персон из PostHog в `tools/export_data_scripts/posthog_exports/`:
 
-- `tools/posthog_export_events.ps1` / `.bat`
-- `tools/posthog_export_all.ps1` / `.bat`
+- `tools/export_data_scripts/posthog_export_events.ps1` / `.bat`
+- `tools/export_data_scripts/posthog_export_all.ps1` / `.bat`
 
-Папка `tools/posthog_exports/` добавлена в `.gitignore` и не должна коммититься.
+Папка `tools/export_data_scripts/posthog_exports/` добавлена в `.gitignore` и не должна коммититься.
 
 ### H1-H4: протокол проверки и метрики
 
@@ -297,6 +308,17 @@ Overlay удобно реализовать как простой текстов
 **v4** добавляет: (1) снимки применённых лимитов SGD на каждом событии — `sgd_{hp,ms,as,dmg}_floor_applied`, `sgd_*_cap_applied`, `sgd_*_theta_min_applied`, `sgd_*_theta_max_applied`, `sgd_*_theta_range_applied`, `sgd_*_neutral_challenge01`; (2) диагностику компенсации виртуальной мощности из шага SGD — `sgd_vp_has_baseline`, `sgd_vp_baseline`, `sgd_vp_delta_for_decision`, `sgd_vc_decision_current`, `sgd_virtual_error_for_decision`, `sgd_virtual_power_scale`, `sgd_virtual_loss_weight`, `sgd_{hp,ms,as,dmg}_virtual_error_contribution`, `sgd_*_virtual_challenge_weight`. Для анализов, где эти поля обязательны, фильтруйте `telemetry_schema_version >= 4`.
 
 **v5** переводит формальную H3 на четыре оси виртуальной мощности и вызова, совпадающие с актуаторами SGD: `virtual_power_{hp,move_speed,attack_speed,attack_damage}`, `virtual_challenge_*`, `delta_virtual_power_*`, `delta_virtual_challenge_*`, `virtual_gap_*_abs`, `virtual_gap_axes_mean_abs`, `is_within_virtual_gap_axes_epsilon`, `h3_axis_schema = vp_vc_4_axes_v1`. Legacy total-поля (`virtual_power_total`, `virtual_challenge_total`, `virtual_gap_abs`, `delta_virtual_power`, `delta_virtual_challenge`) остаются для совместимости. Для исправленной H3 фильтруйте `telemetry_schema_version >= 5`.
+
+**v6** добавляет decision-step семантику для H3 axis-полей: `h3_is_decision_step`, `h3_decision_step_index`, `h3_decision_step_reason`, `h3_decision_step_interval_seconds`. Для `telemetry_schema_version >= 6` сцепление H3 нужно считать только по decision-step сэмплам.
+
+**v7** фиксирует происхождение `Vc_i` для всех режимов и добавляет runtime-диагностику причин NA:
+- `h3_challenge_source` (`sgd_actuators`, `ga_master_genes_avg`, `ga_living_genes_avg`, `ga_fallback_unity`, `fls_fixed`);
+- `h3_vc_semantics` (сейчас `ln_clamped_multiplier` / `ln_clamped_multiplier_fixed_unity`);
+- mode-neutral alias для decision шага: `dda_is_decision_step`, `dda_decision_step_*`;
+- осевые quality-поля:
+  - `h3_axis_pair_count_{hp,move_speed,attack_speed,attack_damage}`
+  - `h3_axis_nonzero_dvc_count_{hp,move_speed,attack_speed,attack_damage}`
+  - `h3_axis_has_variance_{hp,move_speed,attack_speed,attack_damage}`.
 
 #### Качество сессии
 
@@ -428,7 +450,7 @@ recovery_sessions / degradation_start_sessions
 Основной анализатор:
 
 ```bash
-python tools/analyze_hypotheses_h1_h4.py tools/posthog_exports/ALL_events_*.jsonl
+python tools/analyze_data_scripts/analyze_hypotheses_h1_h4.py tools/export_data_scripts/posthog_exports/ALL_events_*.jsonl
 ```
 
 По умолчанию учитываются **все персонажи** в выгрузке (фильтра по `player_body` нет). Для подмножеств используйте `--only-mode`, временные окна или разделите JSONL вручную.
@@ -436,29 +458,29 @@ python tools/analyze_hypotheses_h1_h4.py tools/posthog_exports/ALL_events_*.json
 Просмотр сессий и полей H2/H4:
 
 ```bash
-python tools/inspect_dda_sessions.py tools/posthog_exports/ALL_events_*.jsonl
+python tools/analyze_data_scripts/inspect_dda_sessions.py tools/export_data_scripts/posthog_exports/ALL_events_*.jsonl
 ```
 
 Анализ только новой схемы v3:
 
 ```bash
-python tools/analyze_hypotheses_h1_h4.py tools/posthog_exports/ALL_events_*.jsonl --min-schema-version 3
+python tools/analyze_data_scripts/analyze_hypotheses_h1_h4.py tools/export_data_scripts/posthog_exports/ALL_events_*.jsonl --min-schema-version 3
 ```
 
 Результаты сохраняются в:
 
-- `tools/posthog_exports/hypotheses_results/session_metrics_h1_h4.csv`;
-- `tools/posthog_exports/hypotheses_results/summary_h1_h4.md`.
+- `tools/export_data_scripts/posthog_exports/hypotheses_results/session_metrics_h1_h4.csv`;
+- `tools/export_data_scripts/posthog_exports/hypotheses_results/summary_h1_h4.md`.
 
 Для проверки распределений сенсоров и подбора диагностических порогов:
 
 ```bash
-python tools/calibrate_sgd_sensors.py tools/posthog_exports/ALL_events_*.jsonl
+python tools/analyze_data_scripts/calibrate_sgd_sensors.py tools/export_data_scripts/posthog_exports/ALL_events_*.jsonl
 ```
 
 Этот скрипт формирует:
 
-- `tools/posthog_exports/hypotheses_results/sensor_calibration_hints.md`.
+- `tools/export_data_scripts/posthog_exports/hypotheses_results/sensor_calibration_hints.md`.
 
 Калибровочный отчет не фиксирует финальные параметры автоматически. Он показывает распределения сенсоров и кандидатные пороги, которые затем нужно вручную зафиксировать в конфигурации эксперимента до финального сбора данных.
 
@@ -484,11 +506,11 @@ python tools/calibrate_sgd_sensors.py tools/posthog_exports/ALL_events_*.jsonl
 Чтобы быстро проверить, что после каждого `dda_session_end` в экспорте есть либо survey, либо skipped, используйте:
 
 ```bash
-python tools/validate_posthog_survey.py tools/posthog_exports/ALL_events_*.jsonl
+python tools/analyze_data_scripts/validate_posthog_survey.py tools/export_data_scripts/posthog_exports/ALL_events_*.jsonl
 ```
 
 Опционально вывести «OK»‑сессии:
 
 ```bash
-python tools/validate_posthog_survey.py tools/posthog_exports/ALL_events_*.jsonl --show-ok
+python tools/analyze_data_scripts/validate_posthog_survey.py tools/export_data_scripts/posthog_exports/ALL_events_*.jsonl --show-ok
 ```

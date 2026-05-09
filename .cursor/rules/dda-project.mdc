@@ -45,5 +45,5 @@ The mod implements DDA based on gradient descent. Architecture: **Sensors → De
 
 ## Deploy
 - After successful build, deploy `GeneticsArtifact.dll` into RoR2 `BepInEx/plugins`.
-  - Uses `tools/InstallToRor2.ps1` from the project build step.
+ - Uses `tools/export_data_scripts/InstallToRor2.ps1` from the project build step.
   - Prefer `ROR2_PLUGINS_PATH` for Thunderstore/r2modman profiles; otherwise `ROR2_GAME_PATH`/`ROR2_DIR`/`ROR2_PATH` or Steam auto-detection.

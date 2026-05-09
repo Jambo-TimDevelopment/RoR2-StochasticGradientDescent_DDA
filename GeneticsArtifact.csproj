@@ -57,8 +57,8 @@
   </ItemGroup>
 
   <Target Name="DeployToRoR2" AfterTargets="Build"
-          Condition="'$(OS)' == 'Windows_NT' and Exists('$(ProjectDir)tools\\InstallToRor2.ps1')">
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\\InstallToRor2.ps1&quot; -DllPath &quot;$(TargetPath)&quot;"
+          Condition="'$(OS)' == 'Windows_NT' and Exists('$(ProjectDir)tools\\export_data_scripts\\InstallToRor2.ps1')">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\\export_data_scripts\\InstallToRor2.ps1&quot; -DllPath &quot;$(TargetPath)&quot;"
           IgnoreExitCode="true"
           WorkingDirectory="$(MSBuildThisFileDirectory)" />
   </Target>

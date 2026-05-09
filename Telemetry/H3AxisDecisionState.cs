@@ -5,6 +5,50 @@ using UnityEngine;
 
 namespace GeneticsArtifact.Telemetry
 {
+    internal readonly struct H3AxisQualitySnapshot
+    {
+        public readonly int PairCountHp;
+        public readonly int PairCountMoveSpeed;
+        public readonly int PairCountAttackSpeed;
+        public readonly int PairCountAttackDamage;
+        public readonly int NonzeroDvcCountHp;
+        public readonly int NonzeroDvcCountMoveSpeed;
+        public readonly int NonzeroDvcCountAttackSpeed;
+        public readonly int NonzeroDvcCountAttackDamage;
+        public readonly bool HasVarianceHp;
+        public readonly bool HasVarianceMoveSpeed;
+        public readonly bool HasVarianceAttackSpeed;
+        public readonly bool HasVarianceAttackDamage;
+
+        public H3AxisQualitySnapshot(
+            int pairCountHp,
+            int pairCountMoveSpeed,
+            int pairCountAttackSpeed,
+            int pairCountAttackDamage,
+            int nonzeroDvcCountHp,
+            int nonzeroDvcCountMoveSpeed,
+            int nonzeroDvcCountAttackSpeed,
+            int nonzeroDvcCountAttackDamage,
+            bool hasVarianceHp,
+            bool hasVarianceMoveSpeed,
+            bool hasVarianceAttackSpeed,
+            bool hasVarianceAttackDamage)
+        {
+            PairCountHp = pairCountHp;
+            PairCountMoveSpeed = pairCountMoveSpeed;
+            PairCountAttackSpeed = pairCountAttackSpeed;
+            PairCountAttackDamage = pairCountAttackDamage;
+            NonzeroDvcCountHp = nonzeroDvcCountHp;
+            NonzeroDvcCountMoveSpeed = nonzeroDvcCountMoveSpeed;
+            NonzeroDvcCountAttackSpeed = nonzeroDvcCountAttackSpeed;
+            NonzeroDvcCountAttackDamage = nonzeroDvcCountAttackDamage;
+            HasVarianceHp = hasVarianceHp;
+            HasVarianceMoveSpeed = hasVarianceMoveSpeed;
+            HasVarianceAttackSpeed = hasVarianceAttackSpeed;
+            HasVarianceAttackDamage = hasVarianceAttackDamage;
+        }
+    }
+
     internal readonly struct H3AxisDecisionSnapshot
     {
         public readonly string Mode;
@@ -51,6 +95,8 @@ namespace GeneticsArtifact.Telemetry
     internal static class H3AxisDecisionState
     {
         private const float ChangeEpsilon = 0.0001f;
+        private const float NonzeroDvcEpsilon = 1e-6f;
+        private const float VarianceEpsilon = 1e-8f;
 
         private static bool _hasModeState;
         private static bool _hasBaselineVirtualPower;
@@ -63,6 +109,30 @@ namespace GeneticsArtifact.Telemetry
         private static SgdVirtualPowerSample _previousDecisionVirtualPower;
         private static SgdVirtualPowerSample _previousDecisionVirtualChallenge;
         private static SgdVirtualPowerSample _lastObservedVirtualChallenge;
+        private static int _pairCountHp;
+        private static int _pairCountMoveSpeed;
+        private static int _pairCountAttackSpeed;
+        private static int _pairCountAttackDamage;
+        private static int _nonzeroDvcCountHp;
+        private static int _nonzeroDvcCountMoveSpeed;
+        private static int _nonzeroDvcCountAttackSpeed;
+        private static int _nonzeroDvcCountAttackDamage;
+        private static float _sumDvpHp;
+        private static float _sumDvpMoveSpeed;
+        private static float _sumDvpAttackSpeed;
+        private static float _sumDvpAttackDamage;
+        private static float _sumDvpSqHp;
+        private static float _sumDvpSqMoveSpeed;
+        private static float _sumDvpSqAttackSpeed;
+        private static float _sumDvpSqAttackDamage;
+        private static float _sumDvcHp;
+        private static float _sumDvcMoveSpeed;
+        private static float _sumDvcAttackSpeed;
+        private static float _sumDvcAttackDamage;
+        private static float _sumDvcSqHp;
+        private static float _sumDvcSqMoveSpeed;
+        private static float _sumDvcSqAttackSpeed;
+        private static float _sumDvcSqAttackDamage;
 
         public static void Reset()
         {
@@ -77,6 +147,7 @@ namespace GeneticsArtifact.Telemetry
             _previousDecisionVirtualPower = default;
             _previousDecisionVirtualChallenge = default;
             _lastObservedVirtualChallenge = default;
+            ResetAxisQuality();
         }
 
         public static SgdVirtualPowerSample ComputeVirtualChallengeAxes(TelemetryDifficultySnapshot snapshot)
@@ -123,15 +194,20 @@ namespace GeneticsArtifact.Telemetry
             SgdVirtualPowerSample deltaVirtualChallenge = default;
             int snapshotStepIndex = _stepIndex;
 
+            bool hasPreviousDecisionForDelta = _hasPreviousDecision;
             if (isDecisionStep)
             {
                 snapshotStepIndex = _stepIndex + 1;
-                deltaVirtualPower = _hasPreviousDecision
+                deltaVirtualPower = hasPreviousDecisionForDelta
                     ? Subtract(relativeVirtualPower, _previousDecisionVirtualPower)
                     : default;
-                deltaVirtualChallenge = _hasPreviousDecision
+                deltaVirtualChallenge = hasPreviousDecisionForDelta
                     ? Subtract(safeChallenge, _previousDecisionVirtualChallenge)
                     : default;
+                if (hasPreviousDecisionForDelta)
+                {
+                    RecordAxisPair(in deltaVirtualPower, in deltaVirtualChallenge);
+                }
 
                 _stepIndex = snapshotStepIndex;
                 _previousDecisionVirtualPower = relativeVirtualPower;
@@ -157,6 +233,23 @@ namespace GeneticsArtifact.Telemetry
                 deltaVirtualChallenge);
         }
 
+        public static H3AxisQualitySnapshot GetQualitySnapshot()
+        {
+            return new H3AxisQualitySnapshot(
+                _pairCountHp,
+                _pairCountMoveSpeed,
+                _pairCountAttackSpeed,
+                _pairCountAttackDamage,
+                _nonzeroDvcCountHp,
+                _nonzeroDvcCountMoveSpeed,
+                _nonzeroDvcCountAttackSpeed,
+                _nonzeroDvcCountAttackDamage,
+                HasVariance(_pairCountHp, _sumDvpHp, _sumDvpSqHp, _sumDvcHp, _sumDvcSqHp),
+                HasVariance(_pairCountMoveSpeed, _sumDvpMoveSpeed, _sumDvpSqMoveSpeed, _sumDvcMoveSpeed, _sumDvcSqMoveSpeed),
+                HasVariance(_pairCountAttackSpeed, _sumDvpAttackSpeed, _sumDvpSqAttackSpeed, _sumDvcAttackSpeed, _sumDvcSqAttackSpeed),
+                HasVariance(_pairCountAttackDamage, _sumDvpAttackDamage, _sumDvpSqAttackDamage, _sumDvcAttackDamage, _sumDvcSqAttackDamage));
+        }
+
         private static void ResetModeState(string mode, int currentSgdSteps, int currentGaLearnSteps)
         {
             _hasModeState = true;
@@ -170,6 +263,114 @@ namespace GeneticsArtifact.Telemetry
             _previousDecisionVirtualPower = default;
             _previousDecisionVirtualChallenge = default;
             _lastObservedVirtualChallenge = default;
+            ResetAxisQuality();
+        }
+
+        private static void ResetAxisQuality()
+        {
+            _pairCountHp = 0;
+            _pairCountMoveSpeed = 0;
+            _pairCountAttackSpeed = 0;
+            _pairCountAttackDamage = 0;
+            _nonzeroDvcCountHp = 0;
+            _nonzeroDvcCountMoveSpeed = 0;
+            _nonzeroDvcCountAttackSpeed = 0;
+            _nonzeroDvcCountAttackDamage = 0;
+            _sumDvpHp = 0f;
+            _sumDvpMoveSpeed = 0f;
+            _sumDvpAttackSpeed = 0f;
+            _sumDvpAttackDamage = 0f;
+            _sumDvpSqHp = 0f;
+            _sumDvpSqMoveSpeed = 0f;
+            _sumDvpSqAttackSpeed = 0f;
+            _sumDvpSqAttackDamage = 0f;
+            _sumDvcHp = 0f;
+            _sumDvcMoveSpeed = 0f;
+            _sumDvcAttackSpeed = 0f;
+            _sumDvcAttackDamage = 0f;
+            _sumDvcSqHp = 0f;
+            _sumDvcSqMoveSpeed = 0f;
+            _sumDvcSqAttackSpeed = 0f;
+            _sumDvcSqAttackDamage = 0f;
+        }
+
+        private static void RecordAxisPair(in SgdVirtualPowerSample deltaVirtualPower, in SgdVirtualPowerSample deltaVirtualChallenge)
+        {
+            RecordAxisPair(
+                deltaVirtualPower.Hp,
+                deltaVirtualChallenge.Hp,
+                ref _pairCountHp,
+                ref _nonzeroDvcCountHp,
+                ref _sumDvpHp,
+                ref _sumDvpSqHp,
+                ref _sumDvcHp,
+                ref _sumDvcSqHp);
+            RecordAxisPair(
+                deltaVirtualPower.MoveSpeed,
+                deltaVirtualChallenge.MoveSpeed,
+                ref _pairCountMoveSpeed,
+                ref _nonzeroDvcCountMoveSpeed,
+                ref _sumDvpMoveSpeed,
+                ref _sumDvpSqMoveSpeed,
+                ref _sumDvcMoveSpeed,
+                ref _sumDvcSqMoveSpeed);
+            RecordAxisPair(
+                deltaVirtualPower.AttackSpeed,
+                deltaVirtualChallenge.AttackSpeed,
+                ref _pairCountAttackSpeed,
+                ref _nonzeroDvcCountAttackSpeed,
+                ref _sumDvpAttackSpeed,
+                ref _sumDvpSqAttackSpeed,
+                ref _sumDvcAttackSpeed,
+                ref _sumDvcSqAttackSpeed);
+            RecordAxisPair(
+                deltaVirtualPower.AttackDamage,
+                deltaVirtualChallenge.AttackDamage,
+                ref _pairCountAttackDamage,
+                ref _nonzeroDvcCountAttackDamage,
+                ref _sumDvpAttackDamage,
+                ref _sumDvpSqAttackDamage,
+                ref _sumDvcAttackDamage,
+                ref _sumDvcSqAttackDamage);
+        }
+
+        private static void RecordAxisPair(
+            float dvp,
+            float dvc,
+            ref int pairCount,
+            ref int nonzeroDvcCount,
+            ref float sumDvp,
+            ref float sumDvpSq,
+            ref float sumDvc,
+            ref float sumDvcSq)
+        {
+            pairCount++;
+            sumDvp += dvp;
+            sumDvpSq += dvp * dvp;
+            sumDvc += dvc;
+            sumDvcSq += dvc * dvc;
+            if (Mathf.Abs(dvc) > NonzeroDvcEpsilon)
+            {
+                nonzeroDvcCount++;
+            }
+        }
+
+        private static bool HasVariance(
+            int n,
+            float sumDvp,
+            float sumDvpSq,
+            float sumDvc,
+            float sumDvcSq)
+        {
+            if (n < 2)
+            {
+                return false;
+            }
+
+            float nFloat = n;
+            float varDvp = (sumDvpSq / nFloat) - ((sumDvp / nFloat) * (sumDvp / nFloat));
+            float varDvc = (sumDvcSq / nFloat) - ((sumDvc / nFloat) * (sumDvc / nFloat));
+            return varDvp > VarianceEpsilon && varDvc > VarianceEpsilon;
         }
 
         private static bool DetermineDecisionStep(

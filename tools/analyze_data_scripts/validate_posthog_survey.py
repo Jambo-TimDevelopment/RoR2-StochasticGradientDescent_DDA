@@ -58,7 +58,7 @@ def main() -> int:
     ap.add_argument(
         "inputs",
         nargs="+",
-        help="JSONL files or globs, e.g. tools/posthog_exports/ALL_events_*.jsonl",
+        help="JSONL files or globs, e.g. tools/export_data_scripts/posthog_exports/ALL_events_*.jsonl",
     )
     ap.add_argument(
         "--show-ok",
