@@ -1,12 +1,15 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
-REM End-to-end pipeline:
-REM 1) Export PostHog events/persons with telemetry_schema_version >= 6
+REM End-to-end pipeline (telemetry_schema_version >= 7 only in analysis cohort):
+REM 1) Export PostHog events with telemetry_schema_version >= 7
 REM 2) Run hypotheses analysis (H1-H4) -> summary_h1_h4.md + session_metrics_h1_h4.csv
 REM 3) Generate hypothesis charts from the produced CSV
+REM
+REM Export with -TelemetrySchemaVersion 7 still includes any future v8+ in the JSONL;
+REM --min-schema-version 7 in the analyzer drops sessions below 7.
 
-set "ROOT_DIR=%~dp0..\.."
+set "ROOT_DIR=%~dp0..\..\.."
 pushd "%ROOT_DIR%" || (
   echo [ERROR] Failed to switch to repository root.
   exit /b 1
@@ -17,34 +20,50 @@ set "EXPORT_DIR=tools/export_data_scripts/posthog_exports"
 set "ANALYZE_PY=tools/analyze_data_scripts/analyze_hypotheses_h1_h4.py"
 set "CHARTS_PY=tools/analyze_data_scripts/hypotheses_chart_reports/generate_hypotheses_charts.py"
 
-echo [STEP 1/3] Exporting data from PostHog (telemetry_schema_version >= 6)...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%EXPORT_PS1%" -TelemetrySchemaVersion 6
+echo [STEP 1/3] Exporting data from PostHog (telemetry_schema_version ^>= 7)...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%EXPORT_PS1%" -TelemetrySchemaVersion 7 -ExcludePersons
 if errorlevel 1 (
   echo [ERROR] Export step failed.
   popd
   exit /b 1
 )
 
+set "RESOLVER=tools\analyze_data_scripts\schema7\resolve_schema_ge7_paths.py"
 set "EVENTS_FILE="
-for /f "delims=" %%I in ('dir /b /a:-d /o:-d "tools\export_data_scripts\posthog_exports\ALL_events_schema_ge6_*.jsonl" 2^>nul') do (
-  if not defined EVENTS_FILE set "EVENTS_FILE=tools\export_data_scripts\posthog_exports\%%I"
+set "OUT_DIR="
+for /f "usebackq tokens=1,* delims==" %%A in (`python "%RESOLVER%" --exports-root "%EXPORT_DIR%"`) do (
+  if /i "%%A"=="EVENTS_FILE" set "EVENTS_FILE=%%B"
+  if /i "%%A"=="OUT_DIR" set "OUT_DIR=%%B"
 )
 
-if "%EVENTS_FILE%"=="" (
-  echo [ERROR] Could not find exported file: %EXPORT_DIR%\ALL_events_schema_ge6_*.jsonl
+if not defined EVENTS_FILE (
+  echo [ERROR] Could not resolve latest schema-ge7 export. Run: python "%RESOLVER%" --exports-root "%EXPORT_DIR%"
+  popd
+  exit /b 1
+)
+if not defined OUT_DIR (
+  echo [ERROR] resolve_schema_ge7_paths.py did not return OUT_DIR.
   popd
   exit /b 1
 )
 
-for %%F in ("%EVENTS_FILE%") do set "EVENTS_BASENAME=%%~nF"
-set "RUN_TAG=%EVENTS_BASENAME:ALL_events_schema_ge6_=%"
-set "OUT_DIR=%EXPORT_DIR%\hypotheses_results_schema_ge6_%RUN_TAG%"
 set "CSV_PATH=%OUT_DIR%\session_metrics_h1_h4.csv"
+
+if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"
+echo [INFO] Copying raw PostHog JSONL (server export) into report folder...
+for %%F in ("%EVENTS_FILE%") do (
+  copy /Y "%%~fF" "%OUT_DIR%\%%~nxF" >nul
+  if errorlevel 1 (
+    echo [ERROR] Failed to copy events file into %OUT_DIR%
+    popd
+    exit /b 1
+  )
+)
 
 echo [STEP 2/3] Running hypotheses analysis...
 echo [INFO] events file: %EVENTS_FILE%
 echo [INFO] output dir : %OUT_DIR%
-python "%ANALYZE_PY%" "%EVENTS_FILE%" --min-schema-version 6 --out-dir "%OUT_DIR%" --summary-lang ru
+python "%ANALYZE_PY%" "%EVENTS_FILE%" --min-schema-version 7 --out-dir "%OUT_DIR%" --summary-lang ru
 if errorlevel 1 (
   echo [ERROR] Analysis step failed.
   popd
@@ -73,4 +92,3 @@ echo.
 
 popd
 exit /b 0
-

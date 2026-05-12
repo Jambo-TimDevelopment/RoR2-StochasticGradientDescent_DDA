@@ -2,6 +2,20 @@
 
 Upstream reference: **[Rico / GeneticArtifact](https://thunderstore.io/package/Rico/GeneticArtifact/)** (last Thunderstore release noted there: **4.5.3**). This package keeps the same core idea—**Artifact of Genetics** and per-monster **gene multipliers** (health, move speed, attack speed, damage)—but adds a **research DDA** path on top.
 
+## 4.5.12 (this fork)
+
+### Changed
+
+- **SGD decision / virtual power**: extended decision driver and runtime state; item-aware build-power estimation (`SgdBuildPowerItemModel`) and refined virtual-power sampling for axis attribution (supports telemetry and diagnostics).
+- **Telemetry schema v7**: `telemetry_schema_version = 7` with challenge provenance (`h3_challenge_source`), virtual-challenge semantics (`h3_vc_semantics`), `dda_decision_step` aliases, and per-axis H3 quality counters on `dda_sample`.
+- **Runtime telemetry**: `TelemetryDifficultySnapshot` records challenge provenance for SGD / GA / FLS; `H3AxisDecisionState` tracks cumulative per-axis pair / nonzero / variance statistics for diagnostics.
+- **Research tooling (repo only)**: PostHog export scripts moved to `tools/export_data_scripts`, analysis and hypothesis charts to `tools/analyze_data_scripts`; H1–H4 analysis reports H3 correlation “NA” reasons in CSV/summary.
+- **Docs / build**: integration and debug tooling notes updated; MSBuild deploy hook points at `tools/export_data_scripts/InstallToRor2.ps1`.
+
+### Notes
+
+- Follow-up to 4.5.11 (schema v6 decision steps): this release is mainly richer H3 telemetry metadata and offline tooling layout; gameplay behavior is unchanged unless you rely on new event fields in your pipeline.
+
 ## 4.5.11 (this fork)
 
 ### Changed
